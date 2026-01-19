@@ -79,7 +79,7 @@ class TestTask:
 
     def test_title_cannot_be_empty(self):
         """Test that empty title raises error."""
-        with pytest.raises(ValueError, match="at least 1 character"):
+        with pytest.raises(ValueError, match="String should have at least 1 character"):
             Task(title="")
 
     def test_title_cannot_be_whitespace_only(self):
@@ -153,7 +153,7 @@ class TestTaskList:
 
     def test_name_cannot_be_empty(self):
         """Test that empty name raises error."""
-        with pytest.raises(ValueError, match="at least 1 character"):
+        with pytest.raises(ValueError, match="String should have at least 1 character"):
             TaskList(name="", owner="john")
 
     def test_add_task(self):
@@ -261,8 +261,8 @@ class TestModelSerialization:
             priority=Priority.HIGH,
             status=TaskStatus.IN_PROGRESS
         )
-        json_str = original.json()
-        restored = Task.parse_raw(json_str)
+        json_str = original.model_dump_json()
+        restored = Task.model_validate_json(json_str)
         assert restored.title == original.title
         assert restored.priority == original.priority
         assert restored.status == original.status
@@ -270,7 +270,7 @@ class TestModelSerialization:
     def test_task_dict_roundtrip(self):
         """Test that a task can be converted to dict and back."""
         original = Task(title="Test Task")
-        d = original.dict()
+        d = original.model_dump()
         restored = Task(**d)
         assert restored.title == original.title
 
@@ -279,6 +279,6 @@ class TestModelSerialization:
         tag = Tag(name="work")
         task = Task(title="Test", tags=[tag])
         tl = TaskList(name="My List", owner="john", tasks=[task])
-        
-        d = tl.dict()
+
+        d = tl.model_dump()
         assert d["tasks"][0]["tags"][0]["name"] == "work"
