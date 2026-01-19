@@ -158,28 +158,28 @@ class User(BaseModel):
     """A user in the system."""
     
     id: Optional[int] = None
-    username: str = Field(..., min_length=3, max_length=50, regex=r"^[a-zA-Z0-9_]+$")
-    email: str = Field(..., regex=r"^[\w\.-]+@[\w\.-]+\.\w+$")
+    username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_]+$")
+    email: str = Field(..., pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
     full_name: Optional[str] = None
     is_active: bool = True
     task_lists: List[TaskList] = Field(default_factory=list)
 
-    class Config:
-        # Pydantic v1 config style
-        validate_assignment = True
-        schema_extra = {
+    model_config = ConfigDict(
+        validate_assignment=True,
+        json_schema_extra={
             "example": {
                 "username": "johndoe",
                 "email": "john@example.com",
                 "full_name": "John Doe"
             }
         }
+    )
 
-    @validator("email")
+    @field_validator("email")
     def email_must_be_lowercase(cls, v):
         """Normalize email to lowercase."""
         return v.lower()
 
     def to_dict(self) -> dict:
-        """Convert to dictionary (Pydantic v1 style)."""
-        return self.dict()
+        """Convert to dictionary."""
+        return self.model_dump()
