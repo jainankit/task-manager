@@ -250,6 +250,58 @@ class TestUser:
         assert d["username"] == "johndoe"
         assert d["email"] == "john@example.com"
 
+    def test_username_pattern_validation(self):
+        """Test that username pattern validation works (v2 'pattern' parameter)."""
+        # Valid usernames
+        User(username="valid_user", email="test@example.com")
+        User(username="User123", email="test@example.com")
+        User(username="test_user_123", email="test@example.com")
+
+        # Invalid usernames with special characters
+        with pytest.raises(ValueError):
+            User(username="user@name", email="test@example.com")
+        with pytest.raises(ValueError):
+            User(username="user-name", email="test@example.com")
+        with pytest.raises(ValueError):
+            User(username="user.name", email="test@example.com")
+
+    def test_email_pattern_validation(self):
+        """Test that email pattern validation works (v2 'pattern' parameter)."""
+        # Valid emails
+        User(username="testuser", email="user@example.com")
+        User(username="testuser", email="user.name@example.co.uk")
+        User(username="testuser", email="user_name@sub.example.com")
+
+        # Invalid emails
+        with pytest.raises(ValueError):
+            User(username="testuser", email="invalid")
+        with pytest.raises(ValueError):
+            User(username="testuser", email="@example.com")
+        with pytest.raises(ValueError):
+            User(username="testuser", email="user@")
+
+    def test_validate_assignment(self):
+        """Test that validate_assignment works (v2 ConfigDict feature)."""
+        user = User(username="johndoe", email="john@example.com")
+
+        # Valid assignment
+        user.username = "newname"
+        assert user.username == "newname"
+
+        # Invalid assignment should raise error
+        with pytest.raises(ValueError):
+            user.username = "invalid user"  # Contains space
+
+        # Email should also be validated on assignment
+        user.email = "NEWEMAIL@EXAMPLE.COM"
+        assert user.email == "newemail@example.com"  # Should be normalized
+
+    def test_json_schema_extra(self):
+        """Test that json_schema_extra is present (v2 ConfigDict feature)."""
+        schema = User.model_json_schema()
+        assert "examples" in schema or "example" in schema
+        # In Pydantic v2, examples might be at root or in specific format
+
 
 class TestModelSerialization:
     """Tests for model serialization and parsing."""
