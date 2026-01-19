@@ -123,11 +123,9 @@ class TaskList(BaseModel):
     owner: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    class Config:
-        # Pydantic v1 config style
-        validate_assignment = True
+    model_config = ConfigDict(validate_assignment=True)
 
-    @validator("name")
+    @field_validator("name")
     def name_must_not_be_empty(cls, v):
         """Ensure name is not just whitespace."""
         if not v.strip():
@@ -137,7 +135,7 @@ class TaskList(BaseModel):
     def add_task(self, task: Task) -> "TaskList":
         """Add a task to the list."""
         new_tasks = self.tasks + [task]
-        return self.copy(update={"tasks": new_tasks})
+        return self.model_copy(update={"tasks": new_tasks})
 
     def get_tasks_by_status(self, status: TaskStatus) -> List[Task]:
         """Filter tasks by status."""
