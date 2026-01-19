@@ -85,9 +85,9 @@ class Task(BaseModel):
     def set_completed_at_when_done(self):
         """Auto-set completed_at when status is DONE."""
         if self.status == TaskStatus.DONE and self.completed_at is None:
-            self.completed_at = datetime.utcnow()
+            object.__setattr__(self, 'completed_at', datetime.utcnow())
         if self.status != TaskStatus.DONE:
-            self.completed_at = None
+            object.__setattr__(self, 'completed_at', None)
         return self
 
     @model_validator(mode="after")
