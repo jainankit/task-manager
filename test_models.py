@@ -35,7 +35,7 @@ class TestTag:
     def test_tag_is_immutable(self):
         """Test that tags are immutable (frozen)."""
         tag = Tag(name="work")
-        with pytest.raises(TypeError):
+        with pytest.raises(ValueError, match="Instance is frozen"):
             tag.name = "personal"
 
 
@@ -79,7 +79,7 @@ class TestTask:
 
     def test_title_cannot_be_empty(self):
         """Test that empty title raises error."""
-        with pytest.raises(ValueError, match="at least 1 character"):
+        with pytest.raises(ValueError, match="String should have at least 1 character"):
             Task(title="")
 
     def test_title_cannot_be_whitespace_only(self):
@@ -153,7 +153,7 @@ class TestTaskList:
 
     def test_name_cannot_be_empty(self):
         """Test that empty name raises error."""
-        with pytest.raises(ValueError, match="at least 1 character"):
+        with pytest.raises(ValueError, match="String should have at least 1 character"):
             TaskList(name="", owner="john")
 
     def test_add_task(self):
