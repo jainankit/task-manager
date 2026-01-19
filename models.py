@@ -66,43 +66,38 @@ class Task(BaseModel):
             }
         }
 
-    @validator("title")
+    @field_validator("title")
     def title_must_not_be_empty(cls, v):
         """Ensure title is not just whitespace."""
         if not v.strip():
             raise ValueError("Title cannot be empty or whitespace only")
         return v.strip()
 
-    @validator("due_date")
-    def due_date_must_be_future(cls, v, values):
+    @field_validator("due_date")
+    def due_date_must_be_future(cls, v):
         """Warn if due date is in the past (but allow it)."""
-        # Note: In v1, we access other fields via 'values' dict
         if v and v < datetime.utcnow():
             # We allow past dates but could log a warning
             pass
         return v
 
-    @validator("completed_at", always=True)
-    def set_completed_at_when_done(cls, v, values):
+    @model_validator(mode="after")
+    def set_completed_at_when_done(self):
         """Auto-set completed_at when status is DONE."""
-        status = values.get("status")
-        if status == TaskStatus.DONE and v is None:
-            return datetime.utcnow()
-        if status != TaskStatus.DONE:
-            return None
-        return v
+        if self.status == TaskStatus.DONE and self.completed_at is None:
+            self.completed_at = datetime.utcnow()
+        if self.status != TaskStatus.DONE:
+            self.completed_at = None
+        return self
 
-    @root_validator
-    def validate_task_consistency(cls, values):
+    @model_validator(mode="after")
+    def validate_task_consistency(self):
         """Ensure task data is consistent."""
-        status = values.get("status")
-        completed_at = values.get("completed_at")
-        
         # If archived, must have been completed
-        if status == TaskStatus.ARCHIVED and completed_at is None:
+        if self.status == TaskStatus.ARCHIVED and self.completed_at is None:
             raise ValueError("Archived tasks must have a completed_at timestamp")
-        
-        return values
+
+        return self
 
     def mark_complete(self) -> "Task":
         """Mark the task as complete."""
