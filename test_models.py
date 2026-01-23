@@ -537,6 +537,205 @@ class TestTaskTimezones:
         # Verify ordering
         assert task.completed_at >= task.created_at
 
+    # Edge Case Tests for Datetime Comparisons
+    def test_task_creation_with_microsecond_precision_due_date(self):
+        """Test task creation with due_date set to microseconds precision (datetime precision edge case)."""
+        # Create datetime with specific microsecond precision
+        created = datetime(2025, 1, 15, 10, 30, 45, 123456)
+        due_with_microseconds = datetime(2025, 1, 20, 14, 22, 33, 987654)
+
+        task = Task(
+            title="Microsecond Precision Task",
+            created_at=created,
+            due_date=due_with_microseconds
+        )
+
+        # Verify that microseconds are preserved
+        assert task.due_date.microsecond == 987654
+        assert task.created_at.microsecond == 123456
+
+        # Verify the full datetime is preserved
+        assert task.due_date == due_with_microseconds
+        assert task.created_at == created
+
+        # Verify validation still works with microsecond precision
+        assert task.due_date > task.created_at
+
+    def test_completed_at_auto_setting_with_precise_timing(self):
+        """Test completed_at auto-setting when status changes to DONE with precise timing."""
+        # Create a task with microsecond-precise created_at
+        created_precise = datetime.utcnow()
+
+        task = Task(
+            title="Precise Timing Task",
+            created_at=created_precise,
+            status=TaskStatus.TODO
+        )
+
+        # Capture time before marking complete
+        before_complete = datetime.utcnow()
+
+        # Mark the task as complete
+        completed_task = task.mark_complete()
+
+        # Capture time after marking complete
+        after_complete = datetime.utcnow()
+
+        # Verify completed_at is set with precision
+        assert completed_task.completed_at is not None
+
+        # Verify completed_at has microsecond precision
+        assert completed_task.completed_at.microsecond is not None
+
+        # Verify completed_at is within the expected time window
+        assert before_complete <= completed_task.completed_at <= after_complete
+
+        # Verify completed_at is after created_at (even with microsecond precision)
+        assert completed_task.completed_at >= completed_task.created_at
+
+    def test_datetime_fields_serialize_deserialize_preserving_precision(self):
+        """Test that datetime fields serialize and deserialize correctly preserving precision."""
+        # Create a task with precise microsecond timestamps
+        created_precise = datetime(2025, 1, 15, 10, 30, 45, 123456)
+        due_precise = datetime(2025, 1, 20, 14, 22, 33, 987654)
+
+        original_task = Task(
+            title="Precision Serialization Task",
+            description="Testing datetime precision in serialization",
+            created_at=created_precise,
+            due_date=due_precise,
+            status=TaskStatus.DONE
+        )
+
+        # The validator auto-sets completed_at when status is DONE
+        original_completed_at = original_task.completed_at
+        assert original_completed_at is not None
+
+        # Serialize to JSON
+        json_str = original_task.json()
+
+        # Deserialize back from JSON
+        restored_task = Task.parse_raw(json_str)
+
+        # Verify all datetime fields are preserved with microsecond precision
+        assert restored_task.created_at == created_precise
+        assert restored_task.created_at.microsecond == 123456
+
+        assert restored_task.due_date == due_precise
+        assert restored_task.due_date.microsecond == 987654
+
+        assert restored_task.completed_at == original_completed_at
+        assert restored_task.completed_at.microsecond == original_completed_at.microsecond
+
+        # Verify other fields are also preserved
+        assert restored_task.title == original_task.title
+        assert restored_task.description == original_task.description
+        assert restored_task.status == original_task.status
+
+    def test_datetime_dict_roundtrip_preserves_precision(self):
+        """Test that datetime precision is preserved through dict conversion."""
+        # Create a task with microsecond-precise timestamps
+        created = datetime(2025, 2, 10, 8, 15, 30, 456789)
+        due = datetime(2025, 2, 15, 16, 45, 22, 123987)
+
+        original_task = Task(
+            title="Dict Precision Task",
+            created_at=created,
+            due_date=due
+        )
+
+        # Convert to dict
+        task_dict = original_task.dict()
+
+        # Reconstruct from dict
+        restored_task = Task(**task_dict)
+
+        # Verify microsecond precision is preserved
+        assert restored_task.created_at.microsecond == 456789
+        assert restored_task.due_date.microsecond == 123987
+
+        # Verify full datetime objects match
+        assert restored_task.created_at == created
+        assert restored_task.due_date == due
+
+    def test_task_becomes_overdue_at_exact_current_moment(self):
+        """Test boundary case where task becomes overdue at exact current moment."""
+        # Get current time with microsecond precision
+        current_time = datetime.utcnow()
+
+        # Create a task with due_date in the past (5 seconds ago)
+        created = current_time - timedelta(days=1)
+        due_past = current_time - timedelta(seconds=5)
+
+        task_overdue = Task(
+            title="Clearly Overdue Task",
+            created_at=created,
+            due_date=due_past,
+            status=TaskStatus.TODO
+        )
+
+        # Create a task due far in the future (1 hour from now)
+        due_future = current_time + timedelta(hours=1)
+        task_future = Task(
+            title="Clearly Future Task",
+            created_at=created,
+            due_date=due_future,
+            status=TaskStatus.TODO
+        )
+
+        # Create a task list with both tasks
+        task_list = TaskList(
+            name="Exact Moment List",
+            owner="testuser",
+            tasks=[task_overdue, task_future]
+        )
+
+        # Get overdue tasks
+        overdue_tasks = task_list.get_overdue_tasks()
+
+        # The task due in the past should be overdue
+        overdue_titles = [t.title for t in overdue_tasks]
+        assert "Clearly Overdue Task" in overdue_titles
+
+        # The task due in the future should not be overdue
+        assert "Clearly Future Task" not in overdue_titles
+
+        # Verify that exactly one task is overdue
+        assert len(overdue_tasks) == 1
+
+    def test_microsecond_precision_in_date_validation(self):
+        """Test that date validation works correctly with microsecond precision."""
+        # Create timestamps with microsecond precision
+        created = datetime(2025, 3, 1, 10, 0, 0, 500000)
+
+        # due_date exactly 1 microsecond before created_at (should fail)
+        due_before_by_microsecond = datetime(2025, 3, 1, 10, 0, 0, 499999)
+
+        with pytest.raises(ValueError, match="due_date cannot be before created_at"):
+            Task(
+                title="Microsecond Validation Test",
+                created_at=created,
+                due_date=due_before_by_microsecond
+            )
+
+        # due_date exactly equal to created_at (should succeed)
+        due_equal_with_microseconds = datetime(2025, 3, 1, 10, 0, 0, 500000)
+        task_equal = Task(
+            title="Equal Microseconds",
+            created_at=created,
+            due_date=due_equal_with_microseconds
+        )
+        assert task_equal.due_date == task_equal.created_at
+
+        # due_date 1 microsecond after created_at (should succeed)
+        due_after_by_microsecond = datetime(2025, 3, 1, 10, 0, 0, 500001)
+        task_after = Task(
+            title="One Microsecond Later",
+            created_at=created,
+            due_date=due_after_by_microsecond
+        )
+        assert task_after.due_date > task_after.created_at
+
 
 class TestTaskList:
     """Tests for the TaskList model."""
