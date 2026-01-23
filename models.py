@@ -50,7 +50,7 @@ class Task(BaseModel):
     priority: Priority = Priority.MEDIUM
     tags: List[Tag] = Field(default_factory=list)
     due_date: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
 
     class Config:
