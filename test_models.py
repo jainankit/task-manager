@@ -53,7 +53,7 @@ class TestTask:
 
     def test_create_full_task(self):
         """Test creating a task with all fields."""
-        due = datetime.utcnow() + timedelta(days=7)
+        due = datetime.now(timezone.utc) + timedelta(days=7)
         tag = Tag(name="work")
         task = Task(
             id=1,
