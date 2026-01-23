@@ -154,9 +154,9 @@ class TaskList(BaseModel):
 
     def get_overdue_tasks(self) -> List[Task]:
         """Get all tasks that are past their due date."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return [
-            t for t in self.tasks 
+            t for t in self.tasks
             if t.due_date and t.due_date < now and t.status != TaskStatus.DONE
         ]
 
