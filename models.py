@@ -8,7 +8,11 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, validator, root_validator, ValidationError
 
-from exceptions import FieldValidationException
+from exceptions import (
+    FieldValidationException,
+    StateValidationException,
+    DateValidationException
+)
 
 
 class Priority(str, Enum):
@@ -145,38 +149,102 @@ class Task(BaseModel):
     def title_must_not_be_empty(cls, v):
         """Ensure title is not just whitespace."""
         if not v.strip():
-            raise ValueError("Title cannot be empty or whitespace only")
+            raise FieldValidationException(
+                field_name="title",
+                message="Title cannot be empty or whitespace only",
+                invalid_value=v,
+                error_code="TASK_TITLE_EMPTY",
+                details={
+                    "suggestion": "Provide a non-empty title with at least one non-whitespace character"
+                }
+            )
         return v.strip()
 
     @validator("due_date")
     def due_date_must_be_future(cls, v, values):
-        """Warn if due date is in the past (but allow it)."""
-        # Note: In v1, we access other fields via 'values' dict
-        if v and v < datetime.utcnow():
-            # We allow past dates but could log a warning
-            pass
-        return v
+        """Validate due date is reasonable and provide warnings for far past dates."""
+        if v is None:
+            return v
+
+        try:
+            now = datetime.utcnow()
+
+            # Check if due date is more than 1 year in the past
+            one_year_ago = datetime(now.year - 1, now.month, now.day, now.hour, now.minute, now.second)
+
+            if v < one_year_ago:
+                raise DateValidationException(
+                    field_name="due_date",
+                    message="Due date is more than 1 year in the past, which may be an error",
+                    invalid_date=v,
+                    error_code="DUE_DATE_FAR_PAST",
+                    details={
+                        "due_date": str(v),
+                        "current_time": str(now),
+                        "threshold": "1 year ago",
+                        "suggestion": "Verify the due date is correct. Tasks should not typically have due dates more than 1 year in the past."
+                    }
+                )
+
+            return v
+        except (TypeError, AttributeError, ValueError) as e:
+            raise DateValidationException(
+                field_name="due_date",
+                message=f"Invalid due date format or value: {str(e)}",
+                invalid_date=v,
+                error_code="DUE_DATE_INVALID",
+                details={
+                    "original_error": str(e),
+                    "error_type": type(e).__name__,
+                    "suggestion": "Provide a valid datetime object for due_date"
+                }
+            )
 
     @validator("completed_at", always=True)
     def set_completed_at_when_done(cls, v, values):
         """Auto-set completed_at when status is DONE."""
-        status = values.get("status")
-        if status == TaskStatus.DONE and v is None:
-            return datetime.utcnow()
-        if status != TaskStatus.DONE:
-            return None
-        return v
+        try:
+            status = values.get("status")
+
+            if status == TaskStatus.DONE and v is None:
+                return datetime.utcnow()
+            if status != TaskStatus.DONE:
+                return None
+
+            return v
+        except (TypeError, AttributeError) as e:
+            raise DateValidationException(
+                field_name="completed_at",
+                message=f"Error handling completed_at datetime: {str(e)}",
+                invalid_date=v,
+                error_code="COMPLETED_AT_ERROR",
+                details={
+                    "original_error": str(e),
+                    "error_type": type(e).__name__,
+                    "status": str(values.get("status")),
+                    "suggestion": "Ensure status is a valid TaskStatus and completed_at is a datetime object or None"
+                }
+            )
 
     @root_validator(skip_on_failure=True)
     def validate_task_consistency(cls, values):
         """Ensure task data is consistent."""
         status = values.get("status")
         completed_at = values.get("completed_at")
-        
+
         # If archived, must have been completed
         if status == TaskStatus.ARCHIVED and completed_at is None:
-            raise ValueError("Archived tasks must have a completed_at timestamp")
-        
+            raise StateValidationException(
+                message="Archived tasks must have a completed_at timestamp",
+                current_state=str(status),
+                error_code="ARCHIVED_WITHOUT_COMPLETION",
+                details={
+                    "status": str(status),
+                    "completed_at": str(completed_at),
+                    "suggestion": "Tasks must be marked as DONE with a completed_at timestamp before they can be ARCHIVED"
+                }
+            )
+
         return values
 
     def mark_complete(self) -> "Task":

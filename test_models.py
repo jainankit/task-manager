@@ -5,7 +5,7 @@ import pytest
 from datetime import datetime, timedelta
 
 from models import Task, TaskList, Tag, User, Priority, TaskStatus
-from exceptions import FieldValidationException
+from exceptions import FieldValidationException, StateValidationException
 
 
 class TestTag:
@@ -91,7 +91,7 @@ class TestTask:
 
     def test_title_cannot_be_whitespace_only(self):
         """Test that whitespace-only title raises error."""
-        with pytest.raises(ValueError, match="Title cannot be empty"):
+        with pytest.raises(FieldValidationException, match="Title cannot be empty"):
             Task(title="   ")
 
     def test_completed_at_auto_set_when_done(self):
@@ -106,7 +106,7 @@ class TestTask:
 
     def test_archived_requires_completed_at(self):
         """Test that archived tasks must have completed_at."""
-        with pytest.raises(ValueError, match="Archived tasks must have"):
+        with pytest.raises(StateValidationException, match="Archived tasks must have"):
             Task(
                 title="Test",
                 status=TaskStatus.ARCHIVED,
