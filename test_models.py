@@ -113,6 +113,30 @@ class TestTask:
         assert completed.status == TaskStatus.DONE
         assert completed.completed_at is not None
 
+    def test_archive(self):
+        """Test archiving a task."""
+        task = Task(title="Test", status=TaskStatus.TODO)
+        archived = task.archive()
+        assert archived.status == TaskStatus.ARCHIVED
+        assert archived.completed_at is not None
+
+    def test_archive_incomplete_task(self):
+        """Test archiving a TODO task sets completed_at."""
+        task = Task(title="Test", status=TaskStatus.TODO)
+        assert task.completed_at is None
+        archived = task.archive()
+        assert archived.status == TaskStatus.ARCHIVED
+        assert archived.completed_at is not None
+
+    def test_archive_already_completed(self):
+        """Test archiving an already DONE task preserves completed_at."""
+        task = Task(title="Test", status=TaskStatus.DONE)
+        original_completed_at = task.completed_at
+        assert original_completed_at is not None
+        archived = task.archive()
+        assert archived.status == TaskStatus.ARCHIVED
+        assert archived.completed_at == original_completed_at
+
     def test_to_dict(self):
         """Test converting task to dictionary."""
         task = Task(title="Test")
