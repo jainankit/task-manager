@@ -11,7 +11,8 @@ from pydantic import BaseModel, Field, validator, root_validator, ValidationErro
 from exceptions import (
     FieldValidationException,
     StateValidationException,
-    DateValidationException
+    DateValidationException,
+    DuplicateTaskException
 )
 
 
@@ -278,9 +279,74 @@ class TaskList(BaseModel):
     @validator("name")
     def name_must_not_be_empty(cls, v):
         """Ensure name is not just whitespace."""
-        if not v.strip():
-            raise ValueError("Name cannot be empty or whitespace only")
-        return v.strip()
+        try:
+            if not v or not v.strip():
+                raise FieldValidationException(
+                    field_name="name",
+                    message="TaskList name cannot be empty or whitespace only",
+                    invalid_value=v,
+                    error_code="TASKLIST_NAME_EMPTY",
+                    details={
+                        "suggestion": "Provide a non-empty name with at least one non-whitespace character"
+                    }
+                )
+            return v.strip()
+        except (TypeError, AttributeError) as e:
+            raise FieldValidationException(
+                field_name="name",
+                message=f"TaskList name validation failed: {str(e)}",
+                invalid_value=v,
+                error_code="TASKLIST_NAME_VALIDATION_ERROR",
+                details={
+                    "original_error": str(e),
+                    "error_type": type(e).__name__,
+                    "suggestion": "Ensure name is a string between 1 and 100 characters"
+                }
+            )
+
+    @validator("tasks")
+    def validate_no_duplicate_task_ids(cls, v):
+        """Ensure no duplicate task IDs within the list."""
+        if not v:
+            return v
+
+        try:
+            task_ids = [task.id for task in v if task.id is not None]
+
+            if len(task_ids) != len(set(task_ids)):
+                # Find the duplicate IDs
+                seen = set()
+                duplicates = set()
+                for task_id in task_ids:
+                    if task_id in seen:
+                        duplicates.add(task_id)
+                    seen.add(task_id)
+
+                raise DuplicateTaskException(
+                    task_id=str(list(duplicates)),
+                    message=f"Duplicate task IDs found in list: {', '.join(str(d) for d in duplicates)}",
+                    error_code="DUPLICATE_TASK_IDS_IN_LIST",
+                    details={
+                        "duplicate_ids": list(duplicates),
+                        "total_tasks": len(v),
+                        "unique_ids": len(set(task_ids)),
+                        "suggestion": "Each task in a TaskList must have a unique ID. Remove or reassign duplicate IDs."
+                    }
+                )
+
+            return v
+        except (TypeError, AttributeError) as e:
+            raise FieldValidationException(
+                field_name="tasks",
+                message=f"Task list validation failed: {str(e)}",
+                invalid_value=f"{len(v)} tasks" if v else "None",
+                error_code="TASKLIST_TASKS_VALIDATION_ERROR",
+                details={
+                    "original_error": str(e),
+                    "error_type": type(e).__name__,
+                    "suggestion": "Ensure tasks is a list of Task objects with valid IDs"
+                }
+            )
 
     def add_task(self, task: Task) -> "TaskList":
         """Add a task to the list."""
