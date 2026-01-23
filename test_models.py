@@ -278,10 +278,11 @@ class TestTaskList:
         """Test getting overdue tasks."""
         past = datetime.utcnow() - timedelta(days=1)
         future = datetime.utcnow() + timedelta(days=1)
+        created = datetime.utcnow() - timedelta(days=2)  # Created before past due_date
         tasks = [
-            Task(title="Overdue", due_date=past, status=TaskStatus.TODO),
+            Task(title="Overdue", due_date=past, created_at=created, status=TaskStatus.TODO),
             Task(title="Not overdue", due_date=future, status=TaskStatus.TODO),
-            Task(title="Done overdue", due_date=past, status=TaskStatus.DONE),
+            Task(title="Done overdue", due_date=past, created_at=created, status=TaskStatus.DONE),
         ]
         tl = TaskList(name="My List", owner="john", tasks=tasks)
         overdue = tl.get_overdue_tasks()
