@@ -372,10 +372,10 @@ class TaskList(BaseModel):
 
 class User(BaseModel):
     """A user in the system."""
-    
+
     id: Optional[int] = None
-    username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_]+$")
-    email: str = Field(..., pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
+    username: str = Field(..., min_length=3, max_length=50)
+    email: str = Field(...)
     full_name: Optional[str] = None
     is_active: bool = True
     task_lists: List[TaskList] = Field(default_factory=list)
@@ -391,10 +391,245 @@ class User(BaseModel):
             }
         }
 
+    @validator("username")
+    def validate_username_format(cls, v):
+        """Validate username contains only allowed characters."""
+        import re
+
+        try:
+            if not v or not v.strip():
+                raise FieldValidationException(
+                    field_name="username",
+                    message="Username cannot be empty or whitespace only",
+                    invalid_value=v,
+                    error_code="USERNAME_EMPTY",
+                    details={
+                        "suggestion": "Provide a username with at least 3 characters"
+                    }
+                )
+
+            # Check username format: alphanumeric and underscore only
+            username_pattern = r"^[a-zA-Z0-9_]+$"
+            if not re.match(username_pattern, v):
+                # Identify the problematic characters
+                invalid_chars = [c for c in v if not re.match(r"[a-zA-Z0-9_]", c)]
+
+                raise FieldValidationException(
+                    field_name="username",
+                    message="Username can only contain letters, numbers, and underscores",
+                    invalid_value=v,
+                    error_code="USERNAME_INVALID_FORMAT",
+                    details={
+                        "allowed_characters": "a-z, A-Z, 0-9, _ (underscore)",
+                        "invalid_characters": list(set(invalid_chars)),
+                        "examples": "john_doe, user123, my_username",
+                        "suggestion": "Remove special characters, spaces, or non-alphanumeric characters except underscores"
+                    }
+                )
+
+            return v.strip()
+        except ValidationError as e:
+            raise FieldValidationException(
+                field_name="username",
+                message=f"Username validation failed: {str(e)}",
+                invalid_value=v,
+                error_code="USERNAME_VALIDATION_ERROR",
+                details={
+                    "original_error": str(e),
+                    "suggestion": "Username must be 3-50 characters containing only letters, numbers, and underscores"
+                }
+            )
+
     @validator("email")
-    def email_must_be_lowercase(cls, v):
-        """Normalize email to lowercase."""
-        return v.lower()
+    def validate_email_format(cls, v):
+        """Validate email format with detailed error messages for common mistakes."""
+        import re
+
+        try:
+            if not v or not v.strip():
+                raise FieldValidationException(
+                    field_name="email",
+                    message="Email cannot be empty",
+                    invalid_value=v,
+                    error_code="EMAIL_EMPTY",
+                    details={
+                        "expected_format": "user@domain.com",
+                        "suggestion": "Provide a valid email address"
+                    }
+                )
+
+            v = v.lower().strip()
+
+            # Check for missing @ symbol
+            if "@" not in v:
+                raise FieldValidationException(
+                    field_name="email",
+                    message="Email address must contain @ symbol",
+                    invalid_value=v,
+                    error_code="EMAIL_MISSING_AT_SYMBOL",
+                    details={
+                        "expected_format": "user@domain.com",
+                        "examples": "john@example.com, user@company.org",
+                        "suggestion": "Add @ symbol between username and domain (e.g., user@domain.com)"
+                    }
+                )
+
+            # Check for multiple @ symbols
+            if v.count("@") > 1:
+                raise FieldValidationException(
+                    field_name="email",
+                    message="Email address can only contain one @ symbol",
+                    invalid_value=v,
+                    error_code="EMAIL_MULTIPLE_AT_SYMBOLS",
+                    details={
+                        "at_symbol_count": v.count("@"),
+                        "expected_format": "user@domain.com",
+                        "suggestion": "Ensure only one @ symbol separates username and domain"
+                    }
+                )
+
+            # Split into local and domain parts
+            local_part, domain_part = v.rsplit("@", 1)
+
+            # Validate local part is not empty
+            if not local_part:
+                raise FieldValidationException(
+                    field_name="email",
+                    message="Email must have a username before @ symbol",
+                    invalid_value=v,
+                    error_code="EMAIL_EMPTY_LOCAL_PART",
+                    details={
+                        "expected_format": "user@domain.com",
+                        "suggestion": "Add username before @ symbol (e.g., john@example.com)"
+                    }
+                )
+
+            # Validate domain part is not empty
+            if not domain_part:
+                raise FieldValidationException(
+                    field_name="email",
+                    message="Email must have a domain after @ symbol",
+                    invalid_value=v,
+                    error_code="EMAIL_EMPTY_DOMAIN",
+                    details={
+                        "expected_format": "user@domain.com",
+                        "suggestion": "Add domain after @ symbol (e.g., user@example.com)"
+                    }
+                )
+
+            # Check for missing domain extension (TLD)
+            if "." not in domain_part:
+                raise FieldValidationException(
+                    field_name="email",
+                    message="Email domain must include a top-level domain (e.g., .com, .org)",
+                    invalid_value=v,
+                    error_code="EMAIL_MISSING_TLD",
+                    details={
+                        "domain_provided": domain_part,
+                        "expected_format": "user@domain.com",
+                        "examples": "user@example.com, user@company.org, user@mail.co.uk",
+                        "suggestion": f"Add a domain extension like .com, .org, .net to '{domain_part}'"
+                    }
+                )
+
+            # Check that domain extension is valid (at least 2 characters)
+            domain_parts = domain_part.split(".")
+            tld = domain_parts[-1]
+            if len(tld) < 2:
+                raise FieldValidationException(
+                    field_name="email",
+                    message="Email domain extension must be at least 2 characters",
+                    invalid_value=v,
+                    error_code="EMAIL_INVALID_TLD",
+                    details={
+                        "tld_provided": tld,
+                        "expected_format": "user@domain.com",
+                        "examples": ".com, .org, .net, .co.uk",
+                        "suggestion": "Use a valid domain extension like .com, .org, or .net"
+                    }
+                )
+
+            # Validate full email format with regex
+            email_pattern = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+            if not re.match(email_pattern, v):
+                raise FieldValidationException(
+                    field_name="email",
+                    message="Email format is invalid",
+                    invalid_value=v,
+                    error_code="EMAIL_INVALID_FORMAT",
+                    details={
+                        "expected_format": "user@domain.com",
+                        "examples": "john@example.com, user.name@company.org, test_user@mail.co.uk",
+                        "allowed_characters": "letters, numbers, dots (.), hyphens (-), and underscores (_)",
+                        "suggestion": "Ensure email follows standard format: username@domain.extension"
+                    }
+                )
+
+            return v
+        except ValidationError as e:
+            raise FieldValidationException(
+                field_name="email",
+                message=f"Email validation failed: {str(e)}",
+                invalid_value=v,
+                error_code="EMAIL_VALIDATION_ERROR",
+                details={
+                    "original_error": str(e),
+                    "expected_format": "user@domain.com",
+                    "suggestion": "Provide a valid email address in the format username@domain.extension"
+                }
+            )
+
+    @validator("task_lists")
+    def validate_no_duplicate_task_list_names(cls, v):
+        """Ensure no duplicate task list names per user."""
+        if not v:
+            return v
+
+        try:
+            # Extract all task list names
+            list_names = [task_list.name for task_list in v]
+
+            # Check for duplicates (case-insensitive)
+            normalized_names = [name.lower() for name in list_names]
+
+            if len(normalized_names) != len(set(normalized_names)):
+                # Find the duplicate names
+                seen = set()
+                duplicates = set()
+                for name in normalized_names:
+                    if name in seen:
+                        # Find original case version
+                        original_names = [ln for ln in list_names if ln.lower() == name]
+                        duplicates.update(original_names)
+                    seen.add(name)
+
+                raise FieldValidationException(
+                    field_name="task_lists",
+                    message=f"Duplicate task list names found: {', '.join(sorted(duplicates))}",
+                    invalid_value=f"{len(v)} task lists",
+                    error_code="DUPLICATE_TASKLIST_NAMES",
+                    details={
+                        "duplicate_names": sorted(duplicates),
+                        "total_lists": len(v),
+                        "unique_names": len(set(normalized_names)),
+                        "comparison": "case-insensitive",
+                        "suggestion": "Each task list must have a unique name (case-insensitive). Rename duplicate lists."
+                    }
+                )
+
+            return v
+        except (TypeError, AttributeError) as e:
+            raise FieldValidationException(
+                field_name="task_lists",
+                message=f"Task lists validation failed: {str(e)}",
+                invalid_value=f"{len(v)} task lists" if v else "None",
+                error_code="TASKLISTS_VALIDATION_ERROR",
+                details={
+                    "original_error": str(e),
+                    "error_type": type(e).__name__,
+                    "suggestion": "Ensure task_lists is a list of TaskList objects with valid names"
+                }
+            )
 
     def to_dict(self) -> dict:
         """Convert to dictionary (Pydantic v1 style)."""

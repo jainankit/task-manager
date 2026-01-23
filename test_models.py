@@ -241,12 +241,14 @@ class TestUser:
 
     def test_invalid_username_format(self):
         """Test that invalid username format raises error."""
-        with pytest.raises(ValueError):
+        from exceptions import FieldValidationException
+        with pytest.raises(FieldValidationException):
             User(username="john doe", email="john@example.com")
 
     def test_invalid_email_format(self):
         """Test that invalid email format raises error."""
-        with pytest.raises(ValueError):
+        from exceptions import FieldValidationException
+        with pytest.raises(FieldValidationException):
             User(username="johndoe", email="not-an-email")
 
     def test_to_dict(self):
