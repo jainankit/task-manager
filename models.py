@@ -437,25 +437,211 @@ class TaskList(BaseModel):
             )
 
     def add_task(self, task: Task) -> "TaskList":
-        """Add a task to the list."""
-        new_tasks = self.tasks + [task]
-        return self.copy(update={"tasks": new_tasks})
+        """
+        Add a task to the list.
+
+        Raises:
+            DuplicateTaskException: If a task with the same ID already exists
+            FieldValidationException: If the task object is invalid
+        """
+        # Check for None task ID - allow adding tasks without IDs (will be assigned later)
+        if task.id is not None:
+            # Check if task with this ID already exists
+            existing_ids = [t.id for t in self.tasks if t.id is not None]
+
+            if task.id in existing_ids:
+                raise DuplicateTaskException(
+                    task_id=str(task.id),
+                    message=f"Cannot add task: A task with ID '{task.id}' already exists in this list",
+                    error_code="DUPLICATE_TASK_IN_ADD",
+                    details={
+                        "task_id": task.id,
+                        "task_title": task.title,
+                        "existing_task_count": len(self.tasks),
+                        "suggestion": "Use a unique task ID or update the existing task instead"
+                    }
+                )
+
+        try:
+            new_tasks = self.tasks + [task]
+            return self.copy(update={"tasks": new_tasks})
+        except Exception as e:
+            raise FieldValidationException(
+                field_name="tasks",
+                message=f"Failed to add task to list: {str(e)}",
+                invalid_value=f"Task ID {task.id}" if task.id else "Task without ID",
+                error_code="ADD_TASK_FAILED",
+                details={
+                    "task_id": str(task.id) if task.id else "None",
+                    "task_title": task.title if hasattr(task, "title") else "Unknown",
+                    "original_error": str(e),
+                    "error_type": type(e).__name__,
+                    "suggestion": "Verify the task object is valid and the list can be updated"
+                }
+            )
 
     def get_tasks_by_status(self, status: TaskStatus) -> List[Task]:
-        """Filter tasks by status."""
-        return [t for t in self.tasks if t.status == status]
+        """
+        Filter tasks by status.
+
+        Args:
+            status: The TaskStatus to filter by
+
+        Returns:
+            List of tasks with the specified status
+
+        Raises:
+            FieldValidationException: If the status value is invalid
+        """
+        try:
+            # Validate that status is a valid TaskStatus
+            if isinstance(status, str):
+                # If string is passed, try to convert it to TaskStatus enum
+                try:
+                    status = TaskStatus(status)
+                except ValueError:
+                    valid_statuses = [s.value for s in TaskStatus]
+                    raise FieldValidationException(
+                        field_name="status",
+                        message=f"Invalid status value '{status}'",
+                        invalid_value=status,
+                        error_code="INVALID_STATUS_VALUE",
+                        details={
+                            "valid_statuses": valid_statuses,
+                            "suggestion": f"Use one of the valid status values: {', '.join(valid_statuses)}"
+                        }
+                    )
+
+            # Filter tasks by status
+            return [t for t in self.tasks if t.status == status or t.status == status.value]
+        except FieldValidationException:
+            # Re-raise our custom exceptions
+            raise
+        except Exception as e:
+            raise FieldValidationException(
+                field_name="status",
+                message=f"Error filtering tasks by status: {str(e)}",
+                invalid_value=str(status),
+                error_code="FILTER_BY_STATUS_FAILED",
+                details={
+                    "original_error": str(e),
+                    "error_type": type(e).__name__,
+                    "suggestion": "Ensure the status parameter is a valid TaskStatus enum value"
+                }
+            )
 
     def get_tasks_by_priority(self, priority: Priority) -> List[Task]:
-        """Filter tasks by priority."""
-        return [t for t in self.tasks if t.priority == priority]
+        """
+        Filter tasks by priority.
+
+        Args:
+            priority: The Priority to filter by
+
+        Returns:
+            List of tasks with the specified priority
+
+        Raises:
+            FieldValidationException: If the priority value is invalid
+        """
+        try:
+            # Validate that priority is a valid Priority
+            if isinstance(priority, str):
+                # If string is passed, try to convert it to Priority enum
+                try:
+                    priority = Priority(priority)
+                except ValueError:
+                    valid_priorities = [p.value for p in Priority]
+                    raise FieldValidationException(
+                        field_name="priority",
+                        message=f"Invalid priority value '{priority}'",
+                        invalid_value=priority,
+                        error_code="INVALID_PRIORITY_VALUE",
+                        details={
+                            "valid_priorities": valid_priorities,
+                            "suggestion": f"Use one of the valid priority values: {', '.join(valid_priorities)}"
+                        }
+                    )
+
+            # Filter tasks by priority
+            return [t for t in self.tasks if t.priority == priority or t.priority == priority.value]
+        except FieldValidationException:
+            # Re-raise our custom exceptions
+            raise
+        except Exception as e:
+            raise FieldValidationException(
+                field_name="priority",
+                message=f"Error filtering tasks by priority: {str(e)}",
+                invalid_value=str(priority),
+                error_code="FILTER_BY_PRIORITY_FAILED",
+                details={
+                    "original_error": str(e),
+                    "error_type": type(e).__name__,
+                    "suggestion": "Ensure the priority parameter is a valid Priority enum value"
+                }
+            )
 
     def get_overdue_tasks(self) -> List[Task]:
-        """Get all tasks that are past their due date."""
-        now = datetime.utcnow()
-        return [
-            t for t in self.tasks 
-            if t.due_date and t.due_date < now and t.status != TaskStatus.DONE
-        ]
+        """
+        Get all tasks that are past their due date.
+
+        Returns:
+            List of overdue tasks (tasks with due_date in the past and not completed)
+
+        Raises:
+            DateValidationException: If datetime comparison fails
+        """
+        try:
+            now = datetime.utcnow()
+            overdue_tasks = []
+
+            for t in self.tasks:
+                try:
+                    # Skip tasks without due dates
+                    if not t.due_date:
+                        continue
+
+                    # Skip completed tasks
+                    task_status = t.status if isinstance(t.status, str) else t.status.value
+                    if task_status == TaskStatus.DONE.value:
+                        continue
+
+                    # Check if task is overdue
+                    if t.due_date < now:
+                        overdue_tasks.append(t)
+
+                except (TypeError, AttributeError) as e:
+                    # Handle individual task comparison errors
+                    raise DateValidationException(
+                        field_name="due_date",
+                        message=f"Error comparing due date for task '{t.title if hasattr(t, 'title') else 'Unknown'}': {str(e)}",
+                        invalid_date=t.due_date if hasattr(t, "due_date") else None,
+                        error_code="OVERDUE_COMPARISON_ERROR",
+                        details={
+                            "task_id": str(t.id) if hasattr(t, "id") and t.id else "None",
+                            "task_title": t.title if hasattr(t, "title") else "Unknown",
+                            "due_date": str(t.due_date) if hasattr(t, "due_date") else "None",
+                            "original_error": str(e),
+                            "error_type": type(e).__name__,
+                            "suggestion": "Ensure all tasks have valid datetime objects for due_date field"
+                        }
+                    )
+
+            return overdue_tasks
+
+        except DateValidationException:
+            # Re-raise our custom exceptions
+            raise
+        except Exception as e:
+            raise DateValidationException(
+                field_name="due_date",
+                message=f"Error retrieving overdue tasks: {str(e)}",
+                error_code="GET_OVERDUE_TASKS_FAILED",
+                details={
+                    "original_error": str(e),
+                    "error_type": type(e).__name__,
+                    "suggestion": "Verify all tasks have valid due_date and status fields"
+                }
+            )
 
 
 class User(BaseModel):
