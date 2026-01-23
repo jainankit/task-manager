@@ -6,8 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
-from pydantic_core import ValidationInfo
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict, ValidationInfo
 
 
 class Priority(str, Enum):
@@ -54,11 +53,10 @@ class Task(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None
 
-    class Config:
-        # Pydantic v1 config style
-        use_enum_values = True
-        validate_assignment = True
-        schema_extra = {
+    model_config = ConfigDict(
+        use_enum_values=True,
+        validate_assignment=True,
+        json_schema_extra={
             "example": {
                 "title": "Complete project proposal",
                 "description": "Write and submit the Q1 project proposal",
@@ -66,59 +64,62 @@ class Task(BaseModel):
                 "status": "todo"
             }
         }
+    )
 
-    @validator("title")
+    @field_validator("title")
+    @classmethod
     def title_must_not_be_empty(cls, v):
         """Ensure title is not just whitespace."""
         if not v.strip():
             raise ValueError("Title cannot be empty or whitespace only")
         return v.strip()
 
-    @validator("due_date")
-    def due_date_must_be_future(cls, v, values):
+    @field_validator("due_date")
+    @classmethod
+    def due_date_must_be_future(cls, v, info: ValidationInfo):
         """Warn if due date is in the past (but allow it)."""
-        # Note: In v1, we access other fields via 'values' dict
         if v and v < datetime.utcnow():
             # We allow past dates but could log a warning
             pass
         return v
 
-    @validator("completed_at", always=True)
-    def set_completed_at_when_done(cls, v, values):
+    @field_validator("completed_at", mode='after')
+    @classmethod
+    def set_completed_at_when_done(cls, v, info: ValidationInfo):
         """Auto-set completed_at when status is DONE."""
-        status = values.get("status")
+        status = info.data.get("status")
         if status == TaskStatus.DONE and v is None:
             return datetime.utcnow()
         if status != TaskStatus.DONE:
             return None
         return v
 
-    @root_validator
-    def validate_task_consistency(cls, values):
+    @model_validator(mode='after')
+    def validate_task_consistency(self):
         """Ensure task data is consistent."""
-        status = values.get("status")
-        completed_at = values.get("completed_at")
-        
+        status = self.status
+        completed_at = self.completed_at
+
         # If archived, must have been completed
         if status == TaskStatus.ARCHIVED and completed_at is None:
             raise ValueError("Archived tasks must have a completed_at timestamp")
-        
-        return values
+
+        return self
 
     def mark_complete(self) -> "Task":
         """Mark the task as complete."""
-        return self.copy(update={
+        return self.model_copy(update={
             "status": TaskStatus.DONE,
             "completed_at": datetime.utcnow()
         })
 
     def to_dict(self) -> dict:
-        """Convert to dictionary (Pydantic v1 style)."""
-        return self.dict()
+        """Convert to dictionary."""
+        return self.model_dump()
 
     def to_json(self) -> str:
-        """Convert to JSON string (Pydantic v1 style)."""
-        return self.json()
+        """Convert to JSON string."""
+        return self.model_dump_json()
 
 
 class TaskList(BaseModel):
