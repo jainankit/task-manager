@@ -38,6 +38,25 @@ class TestTag:
         with pytest.raises(TypeError):
             tag.name = "personal"
 
+    def test_tag_name_with_exactly_50_characters(self):
+        """Test that tag name with exactly 50 characters is accepted."""
+        name_50 = "A" * 50
+        tag = Tag(name=name_50)
+        assert tag.name == name_50
+        assert len(tag.name) == 50
+
+    def test_tag_name_with_51_characters_fails(self):
+        """Test that tag name with 51 characters raises ValidationError."""
+        name_51 = "A" * 51
+        with pytest.raises(ValueError, match="ensure this value has at most 50 characters"):
+            Tag(name=name_51)
+
+    def test_tag_name_with_1_character(self):
+        """Test that tag name with 1 character (minimum length) is accepted."""
+        tag = Tag(name="A")
+        assert tag.name == "A"
+        assert len(tag.name) == 1
+
 
 class TestTask:
     """Tests for the Task model."""
