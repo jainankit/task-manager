@@ -45,18 +45,7 @@ class Task(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None
 
-    class Config:
-        # Pydantic v1 config style
-        use_enum_values = True
-        validate_assignment = True
-        schema_extra = {
-            "example": {
-                "title": "Complete project proposal",
-                "description": "Write and submit the Q1 project proposal",
-                "priority": "high",
-                "status": "todo"
-            }
-        }
+    model_config = ConfigDict(use_enum_values=True, validate_assignment=True, json_schema_extra={"example": {"title": "Complete project proposal", "description": "Write and submit the Q1 project proposal", "priority": "high", "status": "todo"}})
 
     @validator("title")
     def title_must_not_be_empty(cls, v):
@@ -98,18 +87,18 @@ class Task(BaseModel):
 
     def mark_complete(self) -> "Task":
         """Mark the task as complete."""
-        return self.copy(update={
+        return self.model_copy(update={
             "status": TaskStatus.DONE,
             "completed_at": datetime.utcnow()
         })
 
     def to_dict(self) -> dict:
-        """Convert to dictionary (Pydantic v1 style)."""
-        return self.dict()
+        """Convert to dictionary."""
+        return self.model_dump()
 
     def to_json(self) -> str:
-        """Convert to JSON string (Pydantic v1 style)."""
-        return self.json()
+        """Convert to JSON string."""
+        return self.model_dump_json()
 
 
 class TaskList(BaseModel):
