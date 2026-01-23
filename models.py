@@ -97,11 +97,17 @@ class Task(BaseModel):
         """Ensure task data is consistent."""
         status = values.get("status")
         completed_at = values.get("completed_at")
-        
+
         # If archived, must have been completed
         if status == TaskStatus.ARCHIVED and completed_at is None:
             raise ValueError("Archived tasks must have a completed_at timestamp")
-        
+
+        # Check that due_date is not before created_at
+        due_date = values.get("due_date")
+        created_at = values.get("created_at")
+        if due_date is not None and created_at is not None and due_date < created_at:
+            raise ValueError("due_date cannot be before created_at")
+
         return values
 
     def mark_complete(self) -> "Task":
