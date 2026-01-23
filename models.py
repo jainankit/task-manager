@@ -14,7 +14,8 @@ from exceptions import (
     DateValidationException,
     DuplicateTaskException,
     InvalidStateTransitionException,
-    SerializationException
+    SerializationException,
+    OwnershipException
 )
 
 
@@ -905,6 +906,142 @@ class User(BaseModel):
                 }
             )
 
+    def validate_task_list_ownership(self, task_list_name: str) -> None:
+        """
+        Validate that a task list with the given name belongs to this user.
+
+        Args:
+            task_list_name: Name of the task list to validate
+
+        Raises:
+            OwnershipException: If the task list doesn't exist or doesn't belong to this user
+        """
+        # Normalize the task list name for comparison (case-insensitive)
+        normalized_search = task_list_name.lower().strip()
+
+        # Search for the task list in the user's lists
+        for task_list in self.task_lists:
+            if task_list.name.lower() == normalized_search:
+                # Verify ownership matches
+                if task_list.owner != self.username:
+                    raise OwnershipException(
+                        message=f"Task list '{task_list_name}' does not belong to user '{self.username}'",
+                        resource_type="task_list",
+                        resource_id=task_list_name,
+                        user_id=self.username,
+                        error_code="TASKLIST_OWNERSHIP_MISMATCH",
+                        details={
+                            "task_list_name": task_list_name,
+                            "expected_owner": self.username,
+                            "actual_owner": task_list.owner,
+                            "suggestion": "Verify the task list belongs to the correct user before performing operations"
+                        }
+                    )
+                # Task list found and ownership validated
+                return
+
+        # Task list not found
+        raise OwnershipException(
+            message=f"Task list '{task_list_name}' not found for user '{self.username}'",
+            resource_type="task_list",
+            resource_id=task_list_name,
+            user_id=self.username,
+            error_code="TASKLIST_NOT_FOUND",
+            details={
+                "task_list_name": task_list_name,
+                "user_id": self.username,
+                "available_lists": [tl.name for tl in self.task_lists],
+                "suggestion": "Check the task list name and ensure it exists for this user"
+            }
+        )
+
+    def _check_user_active(self, operation: str) -> None:
+        """
+        Check if the user is active before performing operations.
+
+        Args:
+            operation: Name of the operation being performed
+
+        Raises:
+            StateValidationException: If the user is inactive
+        """
+        if not self.is_active:
+            raise StateValidationException(
+                message=f"Cannot perform operation '{operation}' on inactive user",
+                current_state="inactive",
+                attempted_state="active",
+                error_code="INACTIVE_USER_OPERATION",
+                details={
+                    "user_id": str(self.id) if self.id else "None",
+                    "username": self.username,
+                    "operation": operation,
+                    "is_active": False,
+                    "suggestion": "Activate the user account before performing operations"
+                }
+            )
+
     def to_dict(self) -> dict:
-        """Convert to dictionary (Pydantic v1 style)."""
-        return self.dict()
+        """
+        Convert to dictionary (Pydantic v1 style).
+
+        Raises:
+            SerializationException: If conversion to dict fails or nested serialization errors occur
+        """
+        try:
+            # Check if user is active before serialization operations
+            self._check_user_active("to_dict")
+
+            # Attempt to serialize the user object
+            return self.dict()
+        except StateValidationException:
+            # Re-raise state validation exceptions (inactive user)
+            raise
+        except Exception as e:
+            # Catch nested serialization errors with detailed context
+            error_context = {
+                "user_id": str(self.id) if self.id else "None",
+                "username": self.username if hasattr(self, "username") else "Unknown",
+                "task_lists_count": len(self.task_lists) if hasattr(self, "task_lists") else 0,
+                "original_error": str(e),
+                "error_type": type(e).__name__
+            }
+
+            # Try to identify which nested field caused the error
+            if hasattr(self, "task_lists"):
+                for idx, task_list in enumerate(self.task_lists):
+                    try:
+                        # Attempt to serialize each task list to find the problematic one
+                        task_list.dict()
+                    except Exception as nested_error:
+                        error_context["problematic_task_list"] = {
+                            "index": idx,
+                            "name": task_list.name if hasattr(task_list, "name") else "Unknown",
+                            "nested_error": str(nested_error)
+                        }
+
+                        # Try to identify which task in the list is problematic
+                        if hasattr(task_list, "tasks"):
+                            for task_idx, task in enumerate(task_list.tasks):
+                                try:
+                                    task.dict()
+                                except Exception as task_error:
+                                    error_context["problematic_task"] = {
+                                        "task_list_index": idx,
+                                        "task_index": task_idx,
+                                        "task_id": str(task.id) if hasattr(task, "id") and task.id else "None",
+                                        "task_title": task.title if hasattr(task, "title") else "Unknown",
+                                        "task_error": str(task_error)
+                                    }
+                                    break
+                        break
+
+            raise SerializationException(
+                message=f"Failed to convert User to dictionary: {str(e)}",
+                operation="to_dict",
+                original_error=e,
+                error_code="USER_TO_DICT_FAILED",
+                details={
+                    **error_context,
+                    "suggestion": "Check nested task lists and tasks for non-serializable data. Ensure all datetime objects and enums are properly configured."
+                }
+            )
