@@ -87,7 +87,7 @@ class Task(BaseModel):
         """Auto-set completed_at when status is DONE."""
         status = values.get("status")
         if status == TaskStatus.DONE and v is None:
-            return datetime.utcnow()
+            return datetime.now(timezone.utc)
         if status != TaskStatus.DONE:
             return None
         return v
