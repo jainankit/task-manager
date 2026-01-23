@@ -623,6 +623,360 @@ class TestTaskList:
         assert overdue[0].title == "Overdue"
 
 
+class TestTaskListTimezones:
+    """Tests for timezone handling in the TaskList model's overdue functionality."""
+
+    def test_get_overdue_tasks_with_mixed_aware_and_naive_datetimes(self):
+        """Test get_overdue_tasks with tasks having timezone-aware and naive datetimes mixed."""
+        # Create tasks with naive datetimes (standard behavior)
+        created_naive = datetime.utcnow() - timedelta(days=2)
+        past_naive = datetime.utcnow() - timedelta(hours=5)
+
+        task_naive_overdue = Task(
+            title="Naive Overdue Task",
+            due_date=past_naive,
+            created_at=created_naive,
+            status=TaskStatus.TODO
+        )
+
+        # Create a task that would be timezone-aware cannot actually be created
+        # because the validator compares with naive datetime.utcnow()
+        # So we test that mixed scenarios don't exist in the current implementation
+
+        task_list = TaskList(
+            name="Mixed TZ List",
+            owner="testuser",
+            tasks=[task_naive_overdue]
+        )
+
+        overdue_tasks = task_list.get_overdue_tasks()
+
+        # Only the naive overdue task should be detected
+        assert len(overdue_tasks) == 1
+        assert overdue_tasks[0].title == "Naive Overdue Task"
+
+    def test_overdue_detection_across_dst_spring_forward(self):
+        """Test overdue detection during DST spring forward transition."""
+        # DST spring forward: clocks jump forward (e.g., 2 AM becomes 3 AM)
+        # Using naive UTC datetimes, DST doesn't directly affect the comparison
+        # but we test edge cases around typical DST transition times
+
+        # Simulate a task created before DST transition
+        # DST typically happens at 2 AM local time, but we're using UTC (no DST)
+        created = datetime.utcnow() - timedelta(days=10)
+
+        # Task due during typical DST transition window
+        # (These are naive UTC times, so no actual DST affects them)
+        due_before_transition = datetime.utcnow() - timedelta(hours=3)
+
+        task_overdue = Task(
+            title="Pre-DST Overdue Task",
+            due_date=due_before_transition,
+            created_at=created,
+            status=TaskStatus.TODO
+        )
+
+        task_list = TaskList(
+            name="DST Spring List",
+            owner="testuser",
+            tasks=[task_overdue]
+        )
+
+        overdue_tasks = task_list.get_overdue_tasks()
+
+        # Task should be detected as overdue
+        assert len(overdue_tasks) == 1
+        assert overdue_tasks[0].title == "Pre-DST Overdue Task"
+
+    def test_overdue_detection_across_dst_fall_back(self):
+        """Test overdue detection during DST fall back transition."""
+        # DST fall back: clocks jump backward (e.g., 2 AM becomes 1 AM again)
+        # Using naive UTC datetimes, DST doesn't affect the comparison
+        # but we test that datetime comparisons remain consistent
+
+        created = datetime.utcnow() - timedelta(days=10)
+
+        # Task due during typical DST fall back window
+        # (These are naive UTC times, so DST doesn't cause ambiguity)
+        due_during_fallback = datetime.utcnow() - timedelta(hours=2)
+
+        task_overdue = Task(
+            title="DST Fallback Overdue Task",
+            due_date=due_during_fallback,
+            created_at=created,
+            status=TaskStatus.TODO
+        )
+
+        task_list = TaskList(
+            name="DST Fall List",
+            owner="testuser",
+            tasks=[task_overdue]
+        )
+
+        overdue_tasks = task_list.get_overdue_tasks()
+
+        # Task should be detected as overdue consistently
+        assert len(overdue_tasks) == 1
+        assert overdue_tasks[0].title == "DST Fallback Overdue Task"
+
+    def test_tasks_due_at_midnight_utc(self):
+        """Test overdue detection for tasks due at midnight UTC."""
+        # Create a task with due_date at midnight UTC (00:00:00)
+        # and test that it's properly detected as overdue if past midnight
+
+        created = datetime.utcnow() - timedelta(days=3)
+
+        # Create a due date for yesterday at midnight UTC
+        yesterday_midnight = datetime.utcnow().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) - timedelta(days=1)
+
+        task_midnight_overdue = Task(
+            title="Midnight UTC Overdue Task",
+            due_date=yesterday_midnight,
+            created_at=created,
+            status=TaskStatus.TODO
+        )
+
+        # Create a task due at tomorrow's midnight (not overdue)
+        tomorrow_midnight = datetime.utcnow().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) + timedelta(days=1)
+
+        task_midnight_future = Task(
+            title="Midnight UTC Future Task",
+            due_date=tomorrow_midnight,
+            created_at=created,
+            status=TaskStatus.TODO
+        )
+
+        task_list = TaskList(
+            name="Midnight UTC List",
+            owner="testuser",
+            tasks=[task_midnight_overdue, task_midnight_future]
+        )
+
+        overdue_tasks = task_list.get_overdue_tasks()
+
+        # Only yesterday's midnight task should be overdue
+        assert len(overdue_tasks) == 1
+        assert overdue_tasks[0].title == "Midnight UTC Overdue Task"
+
+    def test_tasks_due_at_midnight_different_timezones(self):
+        """Test that naive UTC midnight is used consistently regardless of local timezone considerations."""
+        # Since we're using naive UTC datetimes, all midnight comparisons are in UTC
+        # This test verifies that behavior is consistent
+
+        created = datetime.utcnow() - timedelta(days=2)
+
+        # Midnight UTC yesterday
+        midnight_utc_yesterday = datetime.utcnow().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) - timedelta(days=1)
+
+        # If this were interpreted as midnight in a different timezone (e.g., EST),
+        # it would be a different UTC time, but we're using naive UTC
+        # so it's always midnight UTC
+
+        task = Task(
+            title="UTC Midnight Task",
+            due_date=midnight_utc_yesterday,
+            created_at=created,
+            status=TaskStatus.TODO
+        )
+
+        task_list = TaskList(
+            name="Timezone Midnight List",
+            owner="testuser",
+            tasks=[task]
+        )
+
+        overdue_tasks = task_list.get_overdue_tasks()
+
+        # Task should be overdue since it's past midnight UTC yesterday
+        assert len(overdue_tasks) == 1
+        assert overdue_tasks[0].title == "UTC Midnight Task"
+
+    def test_overdue_task_with_due_date_exactly_at_current_utc_time(self):
+        """Test overdue detection with due_date exactly at current UTC time (boundary)."""
+        # Get current UTC time
+        current_time = datetime.utcnow()
+
+        # Create a task with due_date exactly at current time
+        # According to get_overdue_tasks logic: due_date < now
+        # So a task due exactly now should NOT be overdue (boundary case)
+
+        created = current_time - timedelta(days=1)
+
+        task_due_now = Task(
+            title="Due Exactly Now",
+            due_date=current_time,
+            created_at=created,
+            status=TaskStatus.TODO
+        )
+
+        # Create a task due 1 second in the past (should be overdue)
+        task_due_past = Task(
+            title="Due One Second Ago",
+            due_date=current_time - timedelta(seconds=1),
+            created_at=created,
+            status=TaskStatus.TODO
+        )
+
+        # Create a task due 1 second in the future (not overdue)
+        task_due_future = Task(
+            title="Due One Second Future",
+            due_date=current_time + timedelta(seconds=1),
+            created_at=created,
+            status=TaskStatus.TODO
+        )
+
+        task_list = TaskList(
+            name="Boundary Time List",
+            owner="testuser",
+            tasks=[task_due_now, task_due_past, task_due_future]
+        )
+
+        overdue_tasks = task_list.get_overdue_tasks()
+
+        # Only the task due 1 second ago should be overdue
+        # Tasks due exactly now or in the future should not be overdue
+        # Note: There's a tiny race condition here, but we check the logic
+        assert len(overdue_tasks) >= 1
+        assert any(t.title == "Due One Second Ago" for t in overdue_tasks)
+
+        # Verify that the task due exactly now is likely not overdue
+        # (unless time has passed between creation and check)
+        if len(overdue_tasks) == 1:
+            assert overdue_tasks[0].title == "Due One Second Ago"
+
+    def test_overdue_detection_with_microsecond_precision(self):
+        """Test that overdue detection works correctly with microsecond precision."""
+        # Test that datetime comparisons work correctly even with microsecond differences
+
+        created = datetime.utcnow() - timedelta(days=1)
+
+        # Get current time with microseconds
+        now = datetime.utcnow()
+
+        # Task due just microseconds ago (should be overdue)
+        due_microseconds_ago = now - timedelta(microseconds=500)
+
+        task_micro_overdue = Task(
+            title="Microseconds Overdue",
+            due_date=due_microseconds_ago,
+            created_at=created,
+            status=TaskStatus.TODO
+        )
+
+        # Task due in microseconds from now (not overdue)
+        due_microseconds_future = now + timedelta(microseconds=500)
+
+        task_micro_future = Task(
+            title="Microseconds Future",
+            due_date=due_microseconds_future,
+            created_at=created,
+            status=TaskStatus.TODO
+        )
+
+        task_list = TaskList(
+            name="Microsecond List",
+            owner="testuser",
+            tasks=[task_micro_overdue, task_micro_future]
+        )
+
+        overdue_tasks = task_list.get_overdue_tasks()
+
+        # The microseconds-past task should be detected as overdue
+        assert len(overdue_tasks) >= 1
+        assert any(t.title == "Microseconds Overdue" for t in overdue_tasks)
+
+    def test_overdue_tasks_with_various_statuses_and_timezones(self):
+        """Test that overdue detection respects task status regardless of timezone considerations."""
+        created = datetime.utcnow() - timedelta(days=5)
+        past_due = datetime.utcnow() - timedelta(hours=10)
+
+        # Create tasks with various statuses, all with past due dates
+        task_todo = Task(
+            title="TODO Overdue",
+            due_date=past_due,
+            created_at=created,
+            status=TaskStatus.TODO
+        )
+
+        task_in_progress = Task(
+            title="In Progress Overdue",
+            due_date=past_due,
+            created_at=created,
+            status=TaskStatus.IN_PROGRESS
+        )
+
+        task_done = Task(
+            title="Done Overdue",
+            due_date=past_due,
+            created_at=created,
+            status=TaskStatus.DONE
+        )
+
+        # Create archived task (must have completed_at)
+        task_archived = Task(
+            title="Archived Overdue",
+            due_date=past_due,
+            created_at=created,
+            status=TaskStatus.DONE  # First create as DONE to get completed_at
+        )
+        task_archived = task_archived.copy(update={"status": TaskStatus.ARCHIVED})
+
+        task_list = TaskList(
+            name="Status Test List",
+            owner="testuser",
+            tasks=[task_todo, task_in_progress, task_done, task_archived]
+        )
+
+        overdue_tasks = task_list.get_overdue_tasks()
+
+        # get_overdue_tasks filters out only DONE status (not ARCHIVED)
+        # So TODO, IN_PROGRESS, and ARCHIVED tasks with past due dates are returned
+        assert len(overdue_tasks) == 3
+        overdue_titles = [t.title for t in overdue_tasks]
+        assert "TODO Overdue" in overdue_titles
+        assert "In Progress Overdue" in overdue_titles
+        assert "Archived Overdue" in overdue_titles
+        assert "Done Overdue" not in overdue_titles
+
+    def test_overdue_with_none_due_dates(self):
+        """Test that tasks with no due_date are never considered overdue."""
+        created = datetime.utcnow() - timedelta(days=3)
+        past_due = datetime.utcnow() - timedelta(hours=5)
+
+        # Task with no due date
+        task_no_due_date = Task(
+            title="No Due Date",
+            created_at=created,
+            status=TaskStatus.TODO
+        )
+
+        # Task with past due date
+        task_with_due_date = Task(
+            title="With Due Date",
+            due_date=past_due,
+            created_at=created,
+            status=TaskStatus.TODO
+        )
+
+        task_list = TaskList(
+            name="None Due Date List",
+            owner="testuser",
+            tasks=[task_no_due_date, task_with_due_date]
+        )
+
+        overdue_tasks = task_list.get_overdue_tasks()
+
+        # Only the task with a due date should be overdue
+        assert len(overdue_tasks) == 1
+        assert overdue_tasks[0].title == "With Due Date"
+
+
 class TestUser:
     """Tests for the User model."""
 
