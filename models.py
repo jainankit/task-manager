@@ -2,7 +2,7 @@
 Data models for a simple task management API.
 Currently using Pydantic v1 syntax.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 
