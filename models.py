@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict, ValidationInfo
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict, ValidationInfo, validator
 
 
 class Priority(str, Enum):
@@ -83,25 +83,21 @@ class Task(BaseModel):
             pass
         return v
 
-    @field_validator("completed_at", mode='after')
-    @classmethod
-    def set_completed_at_when_done(cls, v, info: ValidationInfo):
-        """Auto-set completed_at when status is DONE."""
-        status = info.data.get("status")
-        if status == TaskStatus.DONE and v is None:
-            return datetime.utcnow()
-        if status != TaskStatus.DONE:
-            return None
-        return v
-
     @model_validator(mode='after')
     def validate_task_consistency(self):
-        """Ensure task data is consistent."""
+        """Ensure task data is consistent and auto-set completed_at."""
         status = self.status
         completed_at = self.completed_at
 
+        # Auto-set completed_at when status is DONE
+        if status == TaskStatus.DONE and completed_at is None:
+            object.__setattr__(self, 'completed_at', datetime.utcnow())
+        # Clear completed_at when status is not DONE
+        elif status != TaskStatus.DONE:
+            object.__setattr__(self, 'completed_at', None)
+
         # If archived, must have been completed
-        if status == TaskStatus.ARCHIVED and completed_at is None:
+        if self.completed_at is None and status == TaskStatus.ARCHIVED:
             raise ValueError("Archived tasks must have a completed_at timestamp")
 
         return self
@@ -167,8 +163,8 @@ class User(BaseModel):
     """A user in the system."""
     
     id: Optional[int] = None
-    username: str = Field(..., min_length=3, max_length=50, regex=r"^[a-zA-Z0-9_]+$")
-    email: str = Field(..., regex=r"^[\w\.-]+@[\w\.-]+\.\w+$")
+    username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_]+$")
+    email: str = Field(..., pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
     full_name: Optional[str] = None
     is_active: bool = True
     task_lists: List[TaskList] = Field(default_factory=list)

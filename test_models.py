@@ -3,6 +3,7 @@ Tests for the task management models.
 """
 import pytest
 from datetime import datetime, timedelta
+from pydantic import ValidationError
 
 from models import Task, TaskList, Tag, User, Priority, TaskStatus
 
@@ -35,7 +36,7 @@ class TestTag:
     def test_tag_is_immutable(self):
         """Test that tags are immutable (frozen)."""
         tag = Tag(name="work")
-        with pytest.raises(TypeError):
+        with pytest.raises(ValidationError):
             tag.name = "personal"
 
 
