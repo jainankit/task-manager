@@ -204,6 +204,50 @@ class TestTask:
         assert isinstance(j, str)
         assert "Test" in j
 
+    # Date Range Validation Tests
+    def test_due_date_before_created_at_fails(self):
+        """Test that creating a task where due_date is before created_at raises ValueError."""
+        created = datetime.utcnow()
+        due = created - timedelta(days=1)
+        with pytest.raises(ValueError, match="due_date cannot be before created_at"):
+            Task(title="Test Task", created_at=created, due_date=due)
+
+    def test_due_date_equals_created_at_succeeds(self):
+        """Test that due_date equal to created_at is accepted as a boundary case."""
+        timestamp = datetime.utcnow()
+        task = Task(title="Test Task", created_at=timestamp, due_date=timestamp)
+        assert task.due_date == task.created_at
+        assert task.due_date == timestamp
+
+    def test_due_date_after_created_at_succeeds(self):
+        """Test that due_date after created_at is accepted."""
+        created = datetime.utcnow()
+        due = created + timedelta(days=1)
+        task = Task(title="Test Task", created_at=created, due_date=due)
+        assert task.due_date > task.created_at
+        assert task.due_date == due
+
+    def test_past_due_date_after_created_at_succeeds(self):
+        """Test that past due_date is allowed if it's still after created_at."""
+        # Create a task with created_at in the past, and due_date also in the past
+        # but still after created_at
+        created = datetime.utcnow() - timedelta(days=5)
+        due = datetime.utcnow() - timedelta(days=2)
+        task = Task(title="Test Task", created_at=created, due_date=due)
+        assert task.due_date > task.created_at
+        assert task.due_date < datetime.utcnow()  # Verify it's actually in the past
+
+    def test_update_due_date_before_created_at_fails(self):
+        """Test that updating a task to set due_date before created_at fails due to validate_assignment=True."""
+        created = datetime.utcnow()
+        due = created + timedelta(days=1)
+        task = Task(title="Test Task", created_at=created, due_date=due)
+
+        # Try to update due_date to before created_at
+        invalid_due = created - timedelta(days=1)
+        with pytest.raises(ValueError, match="due_date cannot be before created_at"):
+            task.due_date = invalid_due
+
 
 class TestTaskList:
     """Tests for the TaskList model."""
