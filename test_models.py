@@ -5,6 +5,7 @@ import pytest
 from datetime import datetime, timedelta
 
 from models import Task, TaskList, Tag, User, Priority, TaskStatus
+from exceptions import FieldValidationException
 
 
 class TestTag:
@@ -24,18 +25,24 @@ class TestTag:
 
     def test_tag_invalid_color_format(self):
         """Test that invalid color format raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(FieldValidationException) as exc_info:
             Tag(name="test", color="red")
+        assert exc_info.value.error_code == "TAG_COLOR_INVALID_FORMAT"
+        assert exc_info.value.field_name == "color"
+        assert "hex format #RRGGBB" in exc_info.value.message
 
     def test_tag_invalid_color_length(self):
         """Test that invalid color length raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(FieldValidationException) as exc_info:
             Tag(name="test", color="#FFF")
+        assert exc_info.value.error_code == "TAG_COLOR_INVALID_FORMAT"
+        assert exc_info.value.field_name == "color"
 
     def test_tag_is_immutable(self):
         """Test that tags are immutable (frozen)."""
+        from pydantic import ValidationError
         tag = Tag(name="work")
-        with pytest.raises(TypeError):
+        with pytest.raises(ValidationError):
             tag.name = "personal"
 
 

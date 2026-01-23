@@ -6,7 +6,9 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, validator, root_validator, ValidationError
+
+from exceptions import FieldValidationException
 
 
 class Priority(str, Enum):
@@ -25,9 +27,9 @@ class TaskStatus(str, Enum):
 
 class Tag(BaseModel):
     """A tag that can be applied to tasks."""
-    
+
     name: str = Field(..., min_length=1, max_length=50)
-    color: str = Field(default="#808080", regex=r"^#[0-9A-Fa-f]{6}$")
+    color: str = Field(default="#808080")
 
     class Config:
         # Pydantic v1 config style
@@ -38,6 +40,79 @@ class Tag(BaseModel):
                 "color": "#FF0000"
             }
         }
+
+    @validator("name")
+    def validate_name_not_empty(cls, v):
+        """Ensure name is not just whitespace."""
+        try:
+            if not v or not v.strip():
+                raise FieldValidationException(
+                    field_name="name",
+                    message="Tag name cannot be empty or whitespace only",
+                    invalid_value=v,
+                    error_code="TAG_NAME_EMPTY",
+                    details={
+                        "suggestion": "Provide a non-empty tag name with at least one non-whitespace character"
+                    }
+                )
+            return v.strip()
+        except ValidationError as e:
+            raise FieldValidationException(
+                field_name="name",
+                message=f"Tag name validation failed: {str(e)}",
+                invalid_value=v,
+                error_code="TAG_NAME_VALIDATION_ERROR",
+                details={
+                    "original_error": str(e),
+                    "suggestion": "Ensure tag name is between 1 and 50 characters"
+                }
+            )
+
+    @validator("color")
+    def validate_color_format(cls, v):
+        """Validate color is in hex format with detailed error message."""
+        import re
+
+        try:
+            if not v:
+                raise FieldValidationException(
+                    field_name="color",
+                    message="Color cannot be empty",
+                    invalid_value=v,
+                    error_code="TAG_COLOR_EMPTY",
+                    details={
+                        "expected_format": "#RRGGBB",
+                        "examples": "#FF0000 (red), #00FF00 (green), #0000FF (blue)"
+                    }
+                )
+
+            hex_pattern = r"^#[0-9A-Fa-f]{6}$"
+            if not re.match(hex_pattern, v):
+                raise FieldValidationException(
+                    field_name="color",
+                    message="Color must be in hex format #RRGGBB",
+                    invalid_value=v,
+                    error_code="TAG_COLOR_INVALID_FORMAT",
+                    details={
+                        "expected_format": "#RRGGBB where R, G, B are hexadecimal digits (0-9, A-F)",
+                        "examples": "#FF0000 (red), #00FF00 (green), #0000FF (blue), #808080 (gray)",
+                        "common_mistakes": "Missing # prefix, wrong length (must be exactly 7 characters), invalid characters"
+                    }
+                )
+
+            return v.upper()
+        except ValidationError as e:
+            raise FieldValidationException(
+                field_name="color",
+                message=f"Color validation failed: {str(e)}",
+                invalid_value=v,
+                error_code="TAG_COLOR_VALIDATION_ERROR",
+                details={
+                    "original_error": str(e),
+                    "expected_format": "#RRGGBB",
+                    "examples": "#FF0000 (red), #00FF00 (green), #0000FF (blue), #808080 (gray)"
+                }
+            )
 
 
 class Task(BaseModel):
@@ -92,7 +167,7 @@ class Task(BaseModel):
             return None
         return v
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_task_consistency(cls, values):
         """Ensure task data is consistent."""
         status = values.get("status")
@@ -165,8 +240,8 @@ class User(BaseModel):
     """A user in the system."""
     
     id: Optional[int] = None
-    username: str = Field(..., min_length=3, max_length=50, regex=r"^[a-zA-Z0-9_]+$")
-    email: str = Field(..., regex=r"^[\w\.-]+@[\w\.-]+\.\w+$")
+    username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_]+$")
+    email: str = Field(..., pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
     full_name: Optional[str] = None
     is_active: bool = True
     task_lists: List[TaskList] = Field(default_factory=list)
