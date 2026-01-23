@@ -108,7 +108,7 @@ class Task(BaseModel):
         """Mark the task as complete."""
         return self.copy(update={
             "status": TaskStatus.DONE,
-            "completed_at": datetime.utcnow()
+            "completed_at": datetime.now(timezone.utc)
         })
 
     def to_dict(self) -> dict:
