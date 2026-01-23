@@ -2,7 +2,8 @@
 Tests for the task management models.
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from pydantic import ValidationError
 
 from models import Task, TaskList, Tag, User, Priority, TaskStatus
 
@@ -332,6 +333,208 @@ class TestTask:
 
         # The validator should auto-set completed_at
         assert task.completed_at is not None
+        assert task.completed_at >= task.created_at
+
+
+class TestTaskTimezones:
+    """Tests for timezone-aware datetime handling in the Task model."""
+
+    def test_create_task_with_timezone_aware_due_date_utc(self):
+        """Test that creating a task with timezone-aware datetime for due_date (UTC) fails due to naive comparison."""
+        # Create a timezone-aware datetime in UTC
+        now_utc = datetime.now(timezone.utc)
+        due_utc = now_utc + timedelta(days=1)
+
+        # The current implementation uses naive datetime.utcnow() in the validator,
+        # which cannot be compared with timezone-aware datetimes
+        with pytest.raises(ValidationError, match="can't compare offset-naive and offset-aware datetimes"):
+            Task(title="UTC Task", due_date=due_utc)
+
+    def test_create_task_with_timezone_aware_due_date_non_utc(self):
+        """Test that creating a task with timezone-aware datetime for due_date (non-UTC) fails due to naive comparison."""
+        # Create a timezone with +5 hours offset
+        tz_plus5 = timezone(timedelta(hours=5))
+        now_tz = datetime.now(tz_plus5)
+        due_tz = now_tz + timedelta(days=1)
+
+        # The current implementation uses naive datetime.utcnow() in the validator,
+        # which cannot be compared with timezone-aware datetimes
+        with pytest.raises(ValidationError, match="can't compare offset-naive and offset-aware datetimes"):
+            Task(title="Non-UTC Task", due_date=due_tz)
+
+    def test_created_at_default_uses_utc_naive(self):
+        """Test that created_at default uses datetime.utcnow() which is timezone-naive."""
+        task = Task(title="Test Task")
+
+        # datetime.utcnow() returns a naive datetime (no tzinfo)
+        assert task.created_at is not None
+        assert task.created_at.tzinfo is None
+
+        # Verify it's close to current UTC time (within 1 second)
+        now_utc_naive = datetime.utcnow()
+        time_diff = abs((task.created_at - now_utc_naive).total_seconds())
+        assert time_diff < 1.0
+
+    def test_overdue_calculation_with_timezone_aware_due_dates(self):
+        """Test that timezone-aware due dates cannot be used due to naive datetime comparison in validator."""
+        # Create a timezone-aware datetime in the past (UTC)
+        past_utc = datetime.now(timezone.utc) - timedelta(days=1)
+
+        # Create tasks with timezone-aware due dates
+        # Note: The validator compares with naive datetime.utcnow()
+        created_naive = datetime.utcnow() - timedelta(days=2)
+
+        # This fails because the due_date validator uses datetime.utcnow() (naive)
+        with pytest.raises(ValidationError, match="can't compare offset-naive and offset-aware datetimes"):
+            Task(
+                title="Overdue Task",
+                due_date=past_utc,
+                created_at=created_naive,
+                status=TaskStatus.TODO
+            )
+
+    def test_mark_complete_with_naive_datetimes(self):
+        """Test mark_complete() method with naive due dates (standard usage)."""
+        # Create a task with naive due_date (standard behavior)
+        due_naive = datetime.utcnow() + timedelta(days=1)
+
+        task = Task(
+            title="Task to Complete",
+            due_date=due_naive,
+            status=TaskStatus.TODO
+        )
+
+        # Mark the task as complete
+        completed_task = task.mark_complete()
+
+        # Verify status is DONE
+        assert completed_task.status == TaskStatus.DONE
+
+        # Verify completed_at is set (will be naive as datetime.utcnow() is used)
+        assert completed_task.completed_at is not None
+        assert completed_task.completed_at.tzinfo is None
+
+        # Verify completed_at is close to current time
+        now_utc_naive = datetime.utcnow()
+        time_diff = abs((completed_task.completed_at - now_utc_naive).total_seconds())
+        assert time_diff < 1.0
+
+    def test_timezone_aware_and_naive_comparison_in_validation(self):
+        """Test that mixing timezone-aware and naive datetimes fails in validation."""
+        # Create a timezone-aware due_date
+        due_utc = datetime.now(timezone.utc) + timedelta(days=1)
+
+        # Create a naive created_at (as default behavior uses datetime.utcnow())
+        created_naive = datetime.utcnow() - timedelta(hours=1)
+
+        # This fails because the due_date validator compares with naive datetime.utcnow()
+        with pytest.raises(ValidationError, match="can't compare offset-naive and offset-aware datetimes"):
+            Task(
+                title="Mixed Timezone Task",
+                due_date=due_utc,
+                created_at=created_naive
+            )
+
+    def test_task_with_timezone_aware_created_at_and_due_date(self):
+        """Test that timezone-aware created_at and due_date cannot be used together."""
+        # Create timezone-aware datetimes
+        created_utc = datetime.now(timezone.utc) - timedelta(hours=2)
+        due_utc = datetime.now(timezone.utc) + timedelta(days=1)
+
+        # This fails because the due_date validator compares with naive datetime.utcnow()
+        with pytest.raises(ValidationError, match="can't compare offset-naive and offset-aware datetimes"):
+            Task(
+                title="Fully Aware Task",
+                created_at=created_utc,
+                due_date=due_utc
+            )
+
+    def test_task_with_naive_datetimes_works(self):
+        """Test that naive datetimes work correctly (current expected behavior)."""
+        # Create naive datetimes
+        created_naive = datetime.utcnow() - timedelta(hours=2)
+        due_naive = datetime.utcnow() + timedelta(days=1)
+
+        task = Task(
+            title="Naive Task",
+            created_at=created_naive,
+            due_date=due_naive
+        )
+
+        assert task.created_at.tzinfo is None
+        assert task.due_date.tzinfo is None
+        assert task.due_date > task.created_at
+
+    def test_overdue_with_naive_datetimes(self):
+        """Test overdue detection with naive due dates (standard usage)."""
+        # Create naive due dates (standard behavior)
+        created_naive = datetime.utcnow() - timedelta(days=2)
+        past_naive = datetime.utcnow() - timedelta(hours=5)
+        future_naive = datetime.utcnow() + timedelta(days=1)
+
+        task_overdue = Task(
+            title="Overdue Task",
+            due_date=past_naive,
+            created_at=created_naive,
+            status=TaskStatus.TODO
+        )
+
+        task_future = Task(
+            title="Future Task",
+            due_date=future_naive,
+            created_at=created_naive,
+            status=TaskStatus.TODO
+        )
+
+        task_list = TaskList(
+            name="Naive TZ List",
+            owner="testuser",
+            tasks=[task_overdue, task_future]
+        )
+
+        overdue_tasks = task_list.get_overdue_tasks()
+
+        # Only the overdue task should be detected
+        assert len(overdue_tasks) == 1
+        assert overdue_tasks[0].title == "Overdue Task"
+
+    def test_due_date_validation_with_timezone_aware_dates(self):
+        """Test that timezone-aware datetimes cannot be used in validation."""
+        # Create timezone-aware datetimes where due_date is before created_at
+        created_utc = datetime.now(timezone.utc)
+        due_utc = created_utc - timedelta(hours=1)
+
+        # This fails due to timezone comparison, not the validation logic
+        with pytest.raises(ValidationError, match="can't compare offset-naive and offset-aware datetimes"):
+            Task(
+                title="Invalid TZ Task",
+                created_at=created_utc,
+                due_date=due_utc
+            )
+
+    def test_completed_at_auto_set_is_naive(self):
+        """Test that auto-set completed_at is naive when created with DONE status."""
+        # Create a task with naive datetimes (standard behavior)
+        created_naive = datetime.utcnow() - timedelta(hours=1)
+        due_naive = datetime.utcnow() + timedelta(days=1)
+
+        # Create task in DONE status
+        task = Task(
+            title="Done Task",
+            created_at=created_naive,
+            due_date=due_naive,
+            status=TaskStatus.DONE
+        )
+
+        # completed_at should be auto-set and naive
+        assert task.completed_at is not None
+        assert task.completed_at.tzinfo is None
+
+        # All datetime fields should be naive
+        assert task.created_at.tzinfo is None
+        assert task.due_date.tzinfo is None
+
+        # Verify ordering
         assert task.completed_at >= task.created_at
 
 
