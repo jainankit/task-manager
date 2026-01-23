@@ -248,6 +248,92 @@ class TestTask:
         with pytest.raises(ValueError, match="due_date cannot be before created_at"):
             task.due_date = invalid_due
 
+    # Created At and Completed At Date Range Tests
+    def test_completed_at_is_after_created_at_when_marked_complete(self):
+        """Test that completed_at is after created_at when a task is marked complete."""
+        created = datetime.utcnow() - timedelta(seconds=5)
+        task = Task(title="Test Task", created_at=created, status=TaskStatus.TODO)
+
+        # Mark task as complete
+        completed_task = task.mark_complete()
+
+        assert completed_task.completed_at is not None
+        assert completed_task.completed_at >= completed_task.created_at
+        assert completed_task.status == TaskStatus.DONE
+
+    def test_archived_task_has_consistent_timestamp_ordering(self):
+        """Test that archived tasks have consistent timestamp ordering (created_at <= completed_at)."""
+        created = datetime.utcnow() - timedelta(hours=2)
+
+        # First create a DONE task with completed_at
+        done_task = Task(
+            title="Done Task",
+            created_at=created,
+            status=TaskStatus.DONE
+        )
+
+        # The validator auto-sets completed_at when status is DONE
+        assert done_task.completed_at is not None
+        assert done_task.created_at <= done_task.completed_at
+
+        # Now update to ARCHIVED status (simulate archiving a completed task)
+        archived_task = done_task.copy(update={"status": TaskStatus.ARCHIVED})
+
+        assert archived_task.created_at <= archived_task.completed_at
+        assert archived_task.status == TaskStatus.ARCHIVED
+
+    def test_archived_task_requires_completed_at(self):
+        """Test that attempting to create archived task without proper completed_at fails."""
+        created = datetime.utcnow() - timedelta(hours=2)
+
+        # Attempting to create an ARCHIVED task directly fails because:
+        # 1. The completed_at validator clears completed_at for non-DONE status
+        # 2. The root validator then fails because ARCHIVED requires completed_at
+        with pytest.raises(ValueError, match="Archived tasks must have"):
+            Task(
+                title="Archived Task",
+                created_at=created,
+                status=TaskStatus.ARCHIVED
+            )
+
+    def test_mark_complete_sets_valid_completed_at_timestamp(self):
+        """Test that mark_complete() sets completed_at to a valid timestamp relative to created_at."""
+        # Create a task with created_at slightly in the past
+        created = datetime.utcnow() - timedelta(minutes=30)
+        task = Task(title="Test Task", created_at=created, status=TaskStatus.TODO)
+
+        # Store current time before marking complete
+        before_complete = datetime.utcnow()
+
+        # Mark the task as complete
+        completed_task = task.mark_complete()
+
+        # Store current time after marking complete
+        after_complete = datetime.utcnow()
+
+        # Verify completed_at is set
+        assert completed_task.completed_at is not None
+
+        # Verify completed_at is after created_at
+        assert completed_task.completed_at >= completed_task.created_at
+
+        # Verify completed_at is within a reasonable time window (should be approximately now)
+        assert before_complete <= completed_task.completed_at <= after_complete
+
+        # Verify status is DONE
+        assert completed_task.status == TaskStatus.DONE
+
+    def test_task_created_as_done_has_valid_completed_at(self):
+        """Test that task created with status DONE has completed_at >= created_at."""
+        created = datetime.utcnow() - timedelta(seconds=1)
+
+        # Create a task that's already done
+        task = Task(title="Already Done Task", created_at=created, status=TaskStatus.DONE)
+
+        # The validator should auto-set completed_at
+        assert task.completed_at is not None
+        assert task.completed_at >= task.created_at
+
 
 class TestTaskList:
     """Tests for the TaskList model."""
