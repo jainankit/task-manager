@@ -231,6 +231,19 @@ class TestTaskList:
         with pytest.raises(ValueError, match="at least 1 character"):
             TaskList(name="", owner="john")
 
+    def test_name_with_exactly_100_characters(self):
+        """Test that task list name with exactly 100 characters is accepted."""
+        name_100 = "A" * 100
+        tl = TaskList(name=name_100, owner="john")
+        assert tl.name == name_100
+        assert len(tl.name) == 100
+
+    def test_name_with_101_characters_fails(self):
+        """Test that task list name with 101 characters raises ValidationError."""
+        name_101 = "A" * 101
+        with pytest.raises(ValueError, match="ensure this value has at most 100 characters"):
+            TaskList(name=name_101, owner="john")
+
     def test_add_task(self):
         """Test adding a task to the list."""
         tl = TaskList(name="My List", owner="john")
