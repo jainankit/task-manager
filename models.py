@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, validator, root_validator, ConfigDict, field_validator, model_validator, ValidationInfo
 
 
 class Priority(str, Enum):
@@ -25,19 +25,11 @@ class TaskStatus(str, Enum):
 
 class Tag(BaseModel):
     """A tag that can be applied to tasks."""
-    
-    name: str = Field(..., min_length=1, max_length=50)
-    color: str = Field(default="#808080", regex=r"^#[0-9A-Fa-f]{6}$")
 
-    class Config:
-        # Pydantic v1 config style
-        frozen = True
-        schema_extra = {
-            "example": {
-                "name": "urgent",
-                "color": "#FF0000"
-            }
-        }
+    model_config = ConfigDict(frozen=True, json_schema_extra={"example": {"name": "urgent", "color": "#FF0000"}})
+
+    name: str = Field(..., min_length=1, max_length=50)
+    color: str = Field(default="#808080", pattern=r"^#[0-9A-Fa-f]{6}$")
 
 
 class Task(BaseModel):
@@ -53,11 +45,10 @@ class Task(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None
 
-    class Config:
-        # Pydantic v1 config style
-        use_enum_values = True
-        validate_assignment = True
-        schema_extra = {
+    model_config = ConfigDict(
+        use_enum_values=True,
+        validate_assignment=True,
+        json_schema_extra={
             "example": {
                 "title": "Complete project proposal",
                 "description": "Write and submit the Q1 project proposal",
@@ -65,59 +56,57 @@ class Task(BaseModel):
                 "status": "todo"
             }
         }
+    )
 
-    @validator("title")
+    @field_validator("title")
+    @classmethod
     def title_must_not_be_empty(cls, v):
         """Ensure title is not just whitespace."""
         if not v.strip():
             raise ValueError("Title cannot be empty or whitespace only")
         return v.strip()
 
-    @validator("due_date")
-    def due_date_must_be_future(cls, v, values):
+    @field_validator("due_date")
+    @classmethod
+    def due_date_must_be_future(cls, v: Optional[datetime], info: ValidationInfo) -> Optional[datetime]:
         """Warn if due date is in the past (but allow it)."""
-        # Note: In v1, we access other fields via 'values' dict
+        # Note: In v2, we use ValidationInfo to access other fields if needed
         if v and v < datetime.utcnow():
             # We allow past dates but could log a warning
             pass
         return v
 
-    @validator("completed_at", always=True)
-    def set_completed_at_when_done(cls, v, values):
-        """Auto-set completed_at when status is DONE."""
-        status = values.get("status")
-        if status == TaskStatus.DONE and v is None:
-            return datetime.utcnow()
-        if status != TaskStatus.DONE:
-            return None
-        return v
+    @model_validator(mode="after")
+    def validate_and_set_completed_at(self) -> "Task":
+        """Auto-set completed_at when status is DONE and validate consistency."""
+        # Handle completed_at auto-setting
+        is_done = self.status == TaskStatus.DONE or self.status == "done"
+        if is_done and self.completed_at is None:
+            object.__setattr__(self, 'completed_at', datetime.utcnow())
+        elif not is_done:
+            object.__setattr__(self, 'completed_at', None)
 
-    @root_validator
-    def validate_task_consistency(cls, values):
-        """Ensure task data is consistent."""
-        status = values.get("status")
-        completed_at = values.get("completed_at")
-        
         # If archived, must have been completed
-        if status == TaskStatus.ARCHIVED and completed_at is None:
+        is_archived = self.status == TaskStatus.ARCHIVED or self.status == "archived"
+        if is_archived and self.completed_at is None:
             raise ValueError("Archived tasks must have a completed_at timestamp")
-        
-        return values
+
+        return self
 
     def mark_complete(self) -> "Task":
         """Mark the task as complete."""
-        return self.copy(update={
+        return self.model_copy(update={
             "status": TaskStatus.DONE,
             "completed_at": datetime.utcnow()
         })
 
     def to_dict(self) -> dict:
-        """Convert to dictionary (Pydantic v1 style)."""
-        return self.dict()
+        """Convert to dictionary."""
+        return self.model_dump()
 
     def to_json(self) -> str:
-        """Convert to JSON string (Pydantic v1 style)."""
-        return self.json()
+        """Convert to JSON string."""
+        return self.model_dump_json()
 
 
 class TaskList(BaseModel):
@@ -128,11 +117,10 @@ class TaskList(BaseModel):
     owner: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    class Config:
-        # Pydantic v1 config style
-        validate_assignment = True
+    model_config = ConfigDict(validate_assignment=True)
 
-    @validator("name")
+    @field_validator("name")
+    @classmethod
     def name_must_not_be_empty(cls, v):
         """Ensure name is not just whitespace."""
         if not v.strip():
@@ -142,7 +130,7 @@ class TaskList(BaseModel):
     def add_task(self, task: Task) -> "TaskList":
         """Add a task to the list."""
         new_tasks = self.tasks + [task]
-        return self.copy(update={"tasks": new_tasks})
+        return self.model_copy(update={"tasks": new_tasks})
 
     def get_tasks_by_status(self, status: TaskStatus) -> List[Task]:
         """Filter tasks by status."""
@@ -165,28 +153,20 @@ class User(BaseModel):
     """A user in the system."""
     
     id: Optional[int] = None
-    username: str = Field(..., min_length=3, max_length=50, regex=r"^[a-zA-Z0-9_]+$")
-    email: str = Field(..., regex=r"^[\w\.-]+@[\w\.-]+\.\w+$")
+    username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_]+$")
+    email: str = Field(..., pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
     full_name: Optional[str] = None
     is_active: bool = True
     task_lists: List[TaskList] = Field(default_factory=list)
 
-    class Config:
-        # Pydantic v1 config style
-        validate_assignment = True
-        schema_extra = {
-            "example": {
-                "username": "johndoe",
-                "email": "john@example.com",
-                "full_name": "John Doe"
-            }
-        }
+    model_config = ConfigDict(validate_assignment=True, json_schema_extra={"example": {"username": "johndoe", "email": "john@example.com", "full_name": "John Doe"}})
 
-    @validator("email")
+    @field_validator("email")
+    @classmethod
     def email_must_be_lowercase(cls, v):
         """Normalize email to lowercase."""
         return v.lower()
 
     def to_dict(self) -> dict:
-        """Convert to dictionary (Pydantic v1 style)."""
-        return self.dict()
+        """Convert to dictionary."""
+        return self.model_dump()
