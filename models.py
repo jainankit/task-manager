@@ -45,7 +45,18 @@ class Task(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None
 
-    model_config = ConfigDict(use_enum_values=True, validate_assignment=True, json_schema_extra={"example": {"title": "Complete project proposal", "description": "Write and submit the Q1 project proposal", "priority": "high", "status": "todo"}})
+    model_config = ConfigDict(
+        use_enum_values=True,
+        validate_assignment=True,
+        json_schema_extra={
+            "example": {
+                "title": "Complete project proposal",
+                "description": "Write and submit the Q1 project proposal",
+                "priority": "high",
+                "status": "todo"
+            }
+        }
+    )
 
     @field_validator("title")
     @classmethod
