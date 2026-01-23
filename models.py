@@ -126,7 +126,7 @@ class TaskList(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     tasks: List[Task] = Field(default_factory=list)
     owner: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Config:
         # Pydantic v1 config style
