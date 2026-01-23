@@ -397,3 +397,100 @@ class OwnershipException(TaskManagerException):
             error_code=error_code,
             details=details
         )
+
+
+class DataIntegrityException(TaskManagerException):
+    """
+    Exception raised for data consistency violations.
+
+    Raised when data integrity constraints are violated, such as inconsistent
+    state between related fields, circular references, or violations of
+    business rules that require multiple fields to be consistent with each other.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        error_code: str = "DATA_INTEGRITY_ERROR",
+        details: Optional[Dict[str, Any]] = None,
+        resolution_hint: Optional[str] = None
+    ):
+        """
+        Initialize a data integrity exception.
+
+        Args:
+            message: Human-readable error message
+            error_code: Error code (defaults to DATA_INTEGRITY_ERROR)
+            details: Additional context about the integrity violation
+            resolution_hint: Suggestion for how to resolve the issue
+        """
+        if details is None:
+            details = {}
+
+        if resolution_hint:
+            details["resolution_hint"] = resolution_hint
+
+        super().__init__(
+            message=message,
+            error_code=error_code,
+            details=details
+        )
+
+
+class SerializationException(TaskManagerException):
+    """
+    Exception raised for JSON/dict conversion errors.
+
+    Raised when an object cannot be serialized to JSON or converted to/from
+    a dictionary representation, typically due to non-serializable data types,
+    circular references, or malformed data structures.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        operation: Optional[str] = None,
+        field_name: Optional[str] = None,
+        original_error: Optional[Exception] = None,
+        error_code: str = "SERIALIZATION_ERROR",
+        details: Optional[Dict[str, Any]] = None
+    ):
+        """
+        Initialize a serialization exception.
+
+        Args:
+            message: Human-readable error message
+            operation: The serialization operation being performed (e.g., 'to_dict', 'to_json', 'from_dict')
+            field_name: Optional field name that caused the serialization failure
+            original_error: The underlying exception that caused the serialization failure
+            error_code: Error code (defaults to SERIALIZATION_ERROR)
+            details: Additional context about the serialization failure
+        """
+        if details is None:
+            details = {}
+
+        if operation:
+            details["operation"] = operation
+
+        if original_error:
+            details["original_error"] = str(original_error)
+            details["error_type"] = type(original_error).__name__
+
+        # Add resolution hints based on common serialization issues
+        if original_error:
+            error_type = type(original_error).__name__
+            if error_type == "TypeError" and "not JSON serializable" in str(original_error):
+                details["resolution_hint"] = "Ensure all fields contain JSON-serializable types (str, int, float, bool, list, dict, None). Convert datetime objects to strings or timestamps."
+            elif error_type == "RecursionError":
+                details["resolution_hint"] = "Circular reference detected. Check for objects that reference each other directly or indirectly."
+            elif error_type == "AttributeError":
+                details["resolution_hint"] = "Object may be missing required attributes for serialization. Verify the object structure is complete."
+            else:
+                details["resolution_hint"] = f"Check the data structure for compatibility with JSON serialization. Original error: {error_type}"
+
+        super().__init__(
+            message=message,
+            error_code=error_code,
+            details=details,
+            field_name=field_name
+        )
