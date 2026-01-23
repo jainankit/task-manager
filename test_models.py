@@ -117,25 +117,25 @@ class TestTask:
         """Test archiving a task."""
         task = Task(title="Test", status=TaskStatus.TODO)
         archived = task.archive()
-        assert archived.status == TaskStatus.ARCHIVED
-        assert archived.completed_at is not None
+        assert archived.status == TaskStatus.ARCHIVED, "Archived task should have status ARCHIVED"
+        assert archived.completed_at is not None, "Archived task should have completed_at set"
 
     def test_archive_incomplete_task(self):
         """Test archiving a TODO task sets completed_at."""
         task = Task(title="Test", status=TaskStatus.TODO)
-        assert task.completed_at is None
+        assert task.completed_at is None, "TODO task should not have completed_at initially"
         archived = task.archive()
-        assert archived.status == TaskStatus.ARCHIVED
-        assert archived.completed_at is not None
+        assert archived.status == TaskStatus.ARCHIVED, "Archived task should have status ARCHIVED"
+        assert archived.completed_at is not None, "Archiving a TODO task should set completed_at"
 
     def test_archive_already_completed(self):
         """Test archiving an already DONE task preserves completed_at."""
         task = Task(title="Test", status=TaskStatus.DONE)
         original_completed_at = task.completed_at
-        assert original_completed_at is not None
+        assert original_completed_at is not None, "DONE task should have completed_at set"
         archived = task.archive()
-        assert archived.status == TaskStatus.ARCHIVED
-        assert archived.completed_at == original_completed_at
+        assert archived.status == TaskStatus.ARCHIVED, "Archived task should have status ARCHIVED"
+        assert archived.completed_at == original_completed_at, "Archiving a DONE task should preserve original completed_at"
 
     def test_to_dict(self):
         """Test converting task to dictionary."""
@@ -253,10 +253,10 @@ class TestTaskList:
         """Test converting task list to dictionary."""
         tl = TaskList(name="My List", owner="john")
         d = tl.to_dict()
-        assert isinstance(d, dict)
-        assert d["name"] == "My List"
-        assert d["owner"] == "john"
-        assert "tasks" in d
+        assert isinstance(d, dict), "to_dict() should return a dictionary"
+        assert d["name"] == "My List", "Dictionary should contain correct name"
+        assert d["owner"] == "john", "Dictionary should contain correct owner"
+        assert "tasks" in d, "Dictionary should contain tasks field"
 
     def test_to_json(self):
         """Test converting task list to JSON."""
