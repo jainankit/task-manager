@@ -12,7 +12,9 @@ from exceptions import (
     FieldValidationException,
     StateValidationException,
     DateValidationException,
-    DuplicateTaskException
+    DuplicateTaskException,
+    InvalidStateTransitionException,
+    SerializationException
 )
 
 
@@ -249,19 +251,105 @@ class Task(BaseModel):
         return values
 
     def mark_complete(self) -> "Task":
-        """Mark the task as complete."""
-        return self.copy(update={
-            "status": TaskStatus.DONE,
-            "completed_at": datetime.utcnow()
-        })
+        """
+        Mark the task as complete.
+
+        Raises:
+            InvalidStateTransitionException: If the task is already completed or archived
+        """
+        # Get status value (handle both enum and string values due to use_enum_values)
+        current_status = self.status if isinstance(self.status, str) else self.status.value
+
+        if current_status == TaskStatus.DONE.value:
+            raise InvalidStateTransitionException(
+                message="Task is already marked as complete",
+                current_status=current_status,
+                attempted_status=TaskStatus.DONE.value,
+                error_code="ALREADY_COMPLETED",
+                details={
+                    "task_id": str(self.id) if self.id else "None",
+                    "task_title": self.title,
+                    "completed_at": str(self.completed_at) if self.completed_at else "None",
+                    "suggestion": "Task is already in DONE status. No action needed."
+                }
+            )
+
+        if current_status == TaskStatus.ARCHIVED.value:
+            raise InvalidStateTransitionException(
+                message="Cannot mark archived tasks as complete",
+                current_status=current_status,
+                attempted_status=TaskStatus.DONE.value,
+                error_code="ARCHIVED_TASK_COMPLETION",
+                details={
+                    "task_id": str(self.id) if self.id else "None",
+                    "task_title": self.title,
+                    "suggestion": "Archived tasks cannot be modified. Restore the task from archive before marking it complete."
+                }
+            )
+
+        try:
+            return self.copy(update={
+                "status": TaskStatus.DONE,
+                "completed_at": datetime.utcnow()
+            })
+        except Exception as e:
+            raise InvalidStateTransitionException(
+                message=f"Failed to mark task as complete: {str(e)}",
+                current_status=current_status,
+                attempted_status=TaskStatus.DONE.value,
+                error_code="MARK_COMPLETE_FAILED",
+                details={
+                    "task_id": str(self.id) if self.id else "None",
+                    "task_title": self.title,
+                    "original_error": str(e),
+                    "error_type": type(e).__name__,
+                    "suggestion": "Check task data integrity and ensure all required fields are valid."
+                }
+            )
 
     def to_dict(self) -> dict:
-        """Convert to dictionary (Pydantic v1 style)."""
-        return self.dict()
+        """
+        Convert to dictionary (Pydantic v1 style).
+
+        Raises:
+            SerializationException: If conversion to dict fails
+        """
+        try:
+            return self.dict()
+        except Exception as e:
+            raise SerializationException(
+                message=f"Failed to convert Task to dictionary: {str(e)}",
+                operation="to_dict",
+                original_error=e,
+                error_code="TASK_TO_DICT_FAILED",
+                details={
+                    "task_id": str(self.id) if self.id else "None",
+                    "task_title": self.title if hasattr(self, "title") else "Unknown",
+                    "suggestion": "Verify that all task fields contain serializable data types."
+                }
+            )
 
     def to_json(self) -> str:
-        """Convert to JSON string (Pydantic v1 style)."""
-        return self.json()
+        """
+        Convert to JSON string (Pydantic v1 style).
+
+        Raises:
+            SerializationException: If JSON encoding fails
+        """
+        try:
+            return self.json()
+        except Exception as e:
+            raise SerializationException(
+                message=f"Failed to convert Task to JSON: {str(e)}",
+                operation="to_json",
+                original_error=e,
+                error_code="TASK_TO_JSON_FAILED",
+                details={
+                    "task_id": str(self.id) if self.id else "None",
+                    "task_title": self.title if hasattr(self, "title") else "Unknown",
+                    "suggestion": "Ensure all task fields are JSON-serializable. Convert datetime objects appropriately."
+                }
+            )
 
 
 class TaskList(BaseModel):
