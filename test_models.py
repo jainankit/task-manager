@@ -118,6 +118,31 @@ class TestTask:
         with pytest.raises(ValueError, match="ensure this value has at most 200 characters"):
             Task(title=title_199_with_spaces)
 
+    def test_description_with_exactly_2000_characters(self):
+        """Test that description with exactly 2000 characters is accepted."""
+        description_2000 = "D" * 2000
+        task = Task(title="Test Task", description=description_2000)
+        assert task.description == description_2000
+        assert len(task.description) == 2000
+
+    def test_description_with_2001_characters_fails(self):
+        """Test that description with 2001 characters raises ValidationError."""
+        description_2001 = "D" * 2001
+        with pytest.raises(ValueError, match="ensure this value has at most 2000 characters"):
+            Task(title="Test Task", description=description_2001)
+
+    def test_description_with_1999_characters(self):
+        """Test that description with 1999 characters is accepted."""
+        description_1999 = "D" * 1999
+        task = Task(title="Test Task", description=description_1999)
+        assert task.description == description_1999
+        assert len(task.description) == 1999
+
+    def test_description_with_none(self):
+        """Test that description can be None as it's an optional field."""
+        task = Task(title="Test Task", description=None)
+        assert task.description is None
+
     def test_completed_at_auto_set_when_done(self):
         """Test that completed_at is auto-set when status is DONE."""
         task = Task(title="Test", status=TaskStatus.DONE)
