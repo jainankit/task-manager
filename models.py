@@ -77,7 +77,7 @@ class Task(BaseModel):
     def due_date_must_be_future(cls, v, values):
         """Warn if due date is in the past (but allow it)."""
         # Note: In v1, we access other fields via 'values' dict
-        if v and v < datetime.utcnow():
+        if v and v < datetime.now(timezone.utc):
             # We allow past dates but could log a warning
             pass
         return v
