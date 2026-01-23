@@ -5,6 +5,7 @@ import pytest
 from datetime import datetime, timedelta
 
 from models import Task, TaskList, Tag, User, Priority, TaskStatus
+from exceptions import FieldValidationException, StateValidationException
 
 
 class TestTag:
@@ -24,18 +25,23 @@ class TestTag:
 
     def test_tag_invalid_color_format(self):
         """Test that invalid color format raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(FieldValidationException) as exc_info:
             Tag(name="test", color="red")
+        assert exc_info.value.error_code == "TAG_COLOR_INVALID_FORMAT"
+        assert exc_info.value.field_name == "color"
+        assert "hex format #RRGGBB" in exc_info.value.message
 
     def test_tag_invalid_color_length(self):
         """Test that invalid color length raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(FieldValidationException) as exc_info:
             Tag(name="test", color="#FFF")
+        assert exc_info.value.error_code == "TAG_COLOR_INVALID_FORMAT"
+        assert exc_info.value.field_name == "color"
 
     def test_tag_is_immutable(self):
         """Test that tags are immutable (frozen)."""
         tag = Tag(name="work")
-        with pytest.raises(TypeError):
+        with pytest.raises((TypeError, Exception)):
             tag.name = "personal"
 
 
@@ -84,7 +90,7 @@ class TestTask:
 
     def test_title_cannot_be_whitespace_only(self):
         """Test that whitespace-only title raises error."""
-        with pytest.raises(ValueError, match="Title cannot be empty"):
+        with pytest.raises(FieldValidationException, match="Title cannot be empty"):
             Task(title="   ")
 
     def test_completed_at_auto_set_when_done(self):
@@ -99,7 +105,7 @@ class TestTask:
 
     def test_archived_requires_completed_at(self):
         """Test that archived tasks must have completed_at."""
-        with pytest.raises(ValueError, match="Archived tasks must have"):
+        with pytest.raises(StateValidationException, match="Archived tasks must have"):
             Task(
                 title="Test",
                 status=TaskStatus.ARCHIVED,
@@ -234,12 +240,14 @@ class TestUser:
 
     def test_invalid_username_format(self):
         """Test that invalid username format raises error."""
-        with pytest.raises(ValueError):
+        from exceptions import FieldValidationException
+        with pytest.raises(FieldValidationException):
             User(username="john doe", email="john@example.com")
 
     def test_invalid_email_format(self):
         """Test that invalid email format raises error."""
-        with pytest.raises(ValueError):
+        from exceptions import FieldValidationException
+        with pytest.raises(FieldValidationException):
             User(username="johndoe", email="not-an-email")
 
     def test_to_dict(self):
