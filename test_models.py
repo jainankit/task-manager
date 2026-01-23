@@ -164,6 +164,31 @@ class TestTaskList:
         assert len(new_tl.tasks) == 1
         assert len(tl.tasks) == 0  # Original unchanged
 
+    def test_remove_task(self):
+        """Test removing a task from the list."""
+        task1 = Task(id=1, title="Task 1")
+        task2 = Task(id=2, title="Task 2")
+        task3 = Task(id=3, title="Task 3")
+        tl = TaskList(name="My List", owner="john", tasks=[task1, task2, task3])
+
+        new_tl = tl.remove_task(task2)
+        assert len(new_tl.tasks) == 2
+        assert task1 in new_tl.tasks
+        assert task2 not in new_tl.tasks
+        assert task3 in new_tl.tasks
+        assert len(tl.tasks) == 3  # Original unchanged
+
+    def test_remove_task_not_found(self):
+        """Test removing a task that doesn't exist."""
+        task1 = Task(id=1, title="Task 1")
+        task2 = Task(id=2, title="Task 2")
+        task_not_in_list = Task(id=3, title="Task 3")
+        tl = TaskList(name="My List", owner="john", tasks=[task1, task2])
+
+        new_tl = tl.remove_task(task_not_in_list)
+        assert new_tl is tl  # Should return same instance
+        assert len(new_tl.tasks) == 2
+
     def test_get_tasks_by_status(self):
         """Test filtering tasks by status."""
         tasks = [
