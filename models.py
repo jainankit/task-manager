@@ -111,6 +111,13 @@ class Task(BaseModel):
             "completed_at": datetime.utcnow()
         })
 
+    def archive(self) -> "Task":
+        """Archive the task."""
+        return self.copy(update={
+            "status": TaskStatus.ARCHIVED,
+            "completed_at": self.completed_at or datetime.utcnow()
+        })
+
     def to_dict(self) -> dict:
         """Convert to dictionary (Pydantic v1 style)."""
         return self.dict()
@@ -144,6 +151,13 @@ class TaskList(BaseModel):
         new_tasks = self.tasks + [task]
         return self.copy(update={"tasks": new_tasks})
 
+    def remove_task(self, task: Task) -> "TaskList":
+        """Remove a task from the list."""
+        new_tasks = [t for t in self.tasks if not (t is task or t.id == task.id)]
+        if len(new_tasks) == len(self.tasks):
+            return self
+        return self.copy(update={"tasks": new_tasks})
+
     def get_tasks_by_status(self, status: TaskStatus) -> List[Task]:
         """Filter tasks by status."""
         return [t for t in self.tasks if t.status == status]
@@ -156,9 +170,17 @@ class TaskList(BaseModel):
         """Get all tasks that are past their due date."""
         now = datetime.utcnow()
         return [
-            t for t in self.tasks 
+            t for t in self.tasks
             if t.due_date and t.due_date < now and t.status != TaskStatus.DONE
         ]
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary (Pydantic v1 style)."""
+        return self.dict()
+
+    def to_json(self) -> str:
+        """Convert to JSON string (Pydantic v1 style)."""
+        return self.json()
 
 
 class User(BaseModel):
