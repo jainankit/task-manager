@@ -5,10 +5,16 @@ This module provides reusable helper functions for input validation to reduce
 code duplication and ensure consistent validation behavior across the codebase.
 """
 import re
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Optional
 
-from exceptions import FieldValidationException, DateValidationException
+from exceptions import (
+    FieldValidationException,
+    DateValidationException,
+    TaskManagerException,
+    ValidationErrorCollection
+)
 
 
 def validate_not_empty_string(value: str, field_name: str) -> str:
@@ -441,3 +447,113 @@ def validate_username_format(value: str) -> str:
         )
 
     return value
+
+
+class ValidationContext:
+    """
+    Context manager for collecting multiple validation errors.
+
+    This context manager allows you to perform batch validation where multiple
+    validation errors are collected and reported together, rather than failing
+    on the first error encountered.
+
+    Example usage:
+        with validation_context() as ctx:
+            ctx.validate(lambda: validate_not_empty_string(title, "title"))
+            ctx.validate(lambda: validate_email_format(email))
+            ctx.validate(lambda: validate_hex_color(color))
+        # If any validations failed, ValidationErrorCollection is raised here
+    """
+
+    def __init__(self):
+        """Initialize a new validation context."""
+        self.errors: list[TaskManagerException] = []
+
+    def validate(self, validation_func: callable) -> bool:
+        """
+        Execute a validation function and collect any errors.
+
+        Args:
+            validation_func: A callable that performs validation and may raise
+                           a TaskManagerException
+
+        Returns:
+            True if validation passed, False if it failed
+        """
+        try:
+            validation_func()
+            return True
+        except TaskManagerException as e:
+            self.errors.append(e)
+            return False
+
+    def add_error(self, error: TaskManagerException) -> None:
+        """
+        Manually add an error to the collection.
+
+        Args:
+            error: A TaskManagerException to add to the error collection
+        """
+        self.errors.append(error)
+
+    def has_errors(self) -> bool:
+        """
+        Check if any errors have been collected.
+
+        Returns:
+            True if there are errors, False otherwise
+        """
+        return len(self.errors) > 0
+
+    def get_errors(self) -> list[TaskManagerException]:
+        """
+        Get the list of collected errors.
+
+        Returns:
+            List of TaskManagerException instances
+        """
+        return self.errors.copy()
+
+    def clear_errors(self) -> None:
+        """Clear all collected errors."""
+        self.errors.clear()
+
+
+@contextmanager
+def validation_context():
+    """
+    Create a validation context for batch validation.
+
+    This context manager collects multiple validation errors and reports them
+    all at once instead of failing on the first error. This provides a better
+    user experience by showing all validation issues that need to be fixed.
+
+    Yields:
+        ValidationContext: A context object with validate() method
+
+    Raises:
+        ValidationErrorCollection: If any validation errors were collected
+
+    Example:
+        >>> with validation_context() as ctx:
+        ...     ctx.validate(lambda: validate_not_empty_string(name, "name"))
+        ...     ctx.validate(lambda: validate_email_format(email))
+        ...     ctx.validate(lambda: validate_hex_color(color))
+        ...
+        ... # ValidationErrorCollection raised here if any validations failed
+
+        >>> # Accessing the result
+        >>> with validation_context() as ctx:
+        ...     result1 = ctx.validate(lambda: validate_email_format(email))
+        ...     result2 = ctx.validate(lambda: validate_hex_color(color))
+        ...     if ctx.has_errors():
+        ...         print(f"Found {len(ctx.get_errors())} errors")
+        ...
+        ... # Still raises ValidationErrorCollection on exit if errors exist
+    """
+    context = ValidationContext()
+    yield context
+
+    # After the context block completes, check for errors and raise if any exist
+    if context.has_errors():
+        raise ValidationErrorCollection(errors=context.get_errors())

@@ -494,3 +494,97 @@ class SerializationException(TaskManagerException):
             details=details,
             field_name=field_name
         )
+
+
+class ValidationErrorCollection(TaskManagerException):
+    """
+    Exception that holds multiple validation errors collected during batch validation.
+
+    This exception is raised by the validation_context() context manager when
+    multiple validation errors are collected and should be reported all at once
+    instead of failing on the first error.
+    """
+
+    def __init__(
+        self,
+        errors: list[TaskManagerException],
+        message: Optional[str] = None,
+        error_code: str = "MULTIPLE_VALIDATION_ERRORS"
+    ):
+        """
+        Initialize a validation error collection.
+
+        Args:
+            errors: List of TaskManagerException instances that were collected
+            message: Optional custom message (defaults to generated message)
+            error_code: Error code (defaults to MULTIPLE_VALIDATION_ERRORS)
+        """
+        self.errors = errors
+
+        if message is None:
+            error_count = len(errors)
+            message = f"Multiple validation errors occurred ({error_count} error{'s' if error_count != 1 else ''})"
+
+        # Build details with summary of all errors
+        details = {
+            "error_count": len(errors),
+            "errors": [error.to_dict() for error in errors]
+        }
+
+        super().__init__(
+            message=message,
+            error_code=error_code,
+            details=details
+        )
+
+    def format_errors(self, include_details: bool = True) -> str:
+        """
+        Format all errors for user-friendly display.
+
+        Args:
+            include_details: Whether to include detailed error information
+
+        Returns:
+            Formatted string with all errors
+        """
+        if not self.errors:
+            return "No validation errors"
+
+        lines = [f"Found {len(self.errors)} validation error(s):"]
+        lines.append("")
+
+        for i, error in enumerate(self.errors, 1):
+            # Add error number and basic info
+            error_header = f"{i}. [{error.error_code}]"
+            if error.field_name:
+                error_header += f" Field '{error.field_name}'"
+            error_header += f": {error.message}"
+            lines.append(error_header)
+
+            # Add details if requested
+            if include_details and error.details:
+                for key, value in error.details.items():
+                    # Skip certain technical details
+                    if key in ("error_count", "errors"):
+                        continue
+
+                    # Format the value nicely
+                    if isinstance(value, list):
+                        if len(value) <= 3:
+                            value_str = ", ".join(str(v) for v in value)
+                        else:
+                            value_str = ", ".join(str(v) for v in value[:3]) + f", ... ({len(value)} total)"
+                    elif isinstance(value, dict):
+                        value_str = str(value)
+                    else:
+                        value_str = str(value)
+
+                    lines.append(f"   - {key}: {value_str}")
+
+            lines.append("")
+
+        return "\n".join(lines)
+
+    def __str__(self) -> str:
+        """Return a string representation with all errors formatted."""
+        return self.format_errors(include_details=True)
