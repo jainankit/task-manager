@@ -111,6 +111,13 @@ class Task(BaseModel):
             "completed_at": datetime.utcnow()
         })
 
+    def archive(self) -> "Task":
+        """Archive the task."""
+        return self.copy(update={
+            "status": TaskStatus.ARCHIVED,
+            "completed_at": self.completed_at or datetime.utcnow()
+        })
+
     def to_dict(self) -> dict:
         """Convert to dictionary (Pydantic v1 style)."""
         return self.dict()
