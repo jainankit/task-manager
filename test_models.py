@@ -2,7 +2,9 @@
 Tests for the task management models.
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
 
 from models import Task, TaskList, Tag, User, Priority, TaskStatus
 
@@ -53,7 +55,7 @@ class TestTask:
 
     def test_create_full_task(self):
         """Test creating a task with all fields."""
-        due = datetime.utcnow() + timedelta(days=7)
+        due = datetime.now(timezone.utc) + timedelta(days=7)
         tag = Tag(name="work")
         task = Task(
             id=1,
@@ -188,8 +190,8 @@ class TestTaskList:
 
     def test_get_overdue_tasks(self):
         """Test getting overdue tasks."""
-        past = datetime.utcnow() - timedelta(days=1)
-        future = datetime.utcnow() + timedelta(days=1)
+        past = datetime.now(timezone.utc) - timedelta(days=1)
+        future = datetime.now(timezone.utc) + timedelta(days=1)
         tasks = [
             Task(title="Overdue", due_date=past, status=TaskStatus.TODO),
             Task(title="Not overdue", due_date=future, status=TaskStatus.TODO),

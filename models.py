@@ -3,6 +3,7 @@ Data models for a simple task management API.
 Currently using Pydantic v1 syntax.
 """
 from datetime import datetime
+from datetime import timezone
 from enum import Enum
 from typing import List, Optional
 
@@ -50,7 +51,7 @@ class Task(BaseModel):
     priority: Priority = Priority.MEDIUM
     tags: List[Tag] = Field(default_factory=list)
     due_date: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
 
     class Config:
@@ -77,7 +78,7 @@ class Task(BaseModel):
     def due_date_must_be_future(cls, v, values):
         """Warn if due date is in the past (but allow it)."""
         # Note: In v1, we access other fields via 'values' dict
-        if v and v < datetime.utcnow():
+        if v and v < datetime.now(timezone.utc):
             # We allow past dates but could log a warning
             pass
         return v
@@ -87,7 +88,7 @@ class Task(BaseModel):
         """Auto-set completed_at when status is DONE."""
         status = values.get("status")
         if status == TaskStatus.DONE and v is None:
-            return datetime.utcnow()
+            return datetime.now(timezone.utc)
         if status != TaskStatus.DONE:
             return None
         return v
@@ -108,7 +109,7 @@ class Task(BaseModel):
         """Mark the task as complete."""
         return self.copy(update={
             "status": TaskStatus.DONE,
-            "completed_at": datetime.utcnow()
+            "completed_at": datetime.now(timezone.utc)
         })
 
     def to_dict(self) -> dict:
@@ -126,7 +127,7 @@ class TaskList(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     tasks: List[Task] = Field(default_factory=list)
     owner: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Config:
         # Pydantic v1 config style
@@ -154,9 +155,9 @@ class TaskList(BaseModel):
 
     def get_overdue_tasks(self) -> List[Task]:
         """Get all tasks that are past their due date."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return [
-            t for t in self.tasks 
+            t for t in self.tasks
             if t.due_date and t.due_date < now and t.status != TaskStatus.DONE
         ]
 
