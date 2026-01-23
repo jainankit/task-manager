@@ -189,7 +189,7 @@ class TestTaskList:
     def test_get_overdue_tasks(self):
         """Test getting overdue tasks."""
         past = datetime.now(timezone.utc) - timedelta(days=1)
-        future = datetime.utcnow() + timedelta(days=1)
+        future = datetime.now(timezone.utc) + timedelta(days=1)
         tasks = [
             Task(title="Overdue", due_date=past, status=TaskStatus.TODO),
             Task(title="Not overdue", due_date=future, status=TaskStatus.TODO),
