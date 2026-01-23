@@ -200,6 +200,23 @@ class TestTaskList:
         assert len(overdue) == 1
         assert overdue[0].title == "Overdue"
 
+    def test_to_dict(self):
+        """Test converting task list to dictionary."""
+        tl = TaskList(name="My List", owner="john")
+        d = tl.to_dict()
+        assert isinstance(d, dict)
+        assert d["name"] == "My List"
+        assert d["owner"] == "john"
+        assert "tasks" in d
+
+    def test_to_json(self):
+        """Test converting task list to JSON."""
+        tl = TaskList(name="My List", owner="john")
+        j = tl.to_json()
+        assert isinstance(j, str)
+        assert "My List" in j
+        assert "john" in j
+
 
 class TestUser:
     """Tests for the User model."""
