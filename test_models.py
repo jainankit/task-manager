@@ -87,6 +87,37 @@ class TestTask:
         with pytest.raises(ValueError, match="Title cannot be empty"):
             Task(title="   ")
 
+    def test_title_with_exactly_200_characters(self):
+        """Test that title with exactly 200 characters is accepted."""
+        title_200 = "A" * 200
+        task = Task(title=title_200)
+        assert task.title == title_200
+        assert len(task.title) == 200
+
+    def test_title_with_201_characters_fails(self):
+        """Test that title with 201 characters raises ValidationError."""
+        title_201 = "A" * 201
+        with pytest.raises(ValueError, match="ensure this value has at most 200 characters"):
+            Task(title=title_201)
+
+    def test_title_with_199_characters(self):
+        """Test that title with 199 characters is accepted."""
+        title_199 = "A" * 199
+        task = Task(title=title_199)
+        assert task.title == title_199
+        assert len(task.title) == 199
+
+    def test_title_boundary_with_whitespace_stripping(self):
+        """Test that whitespace stripping works correctly with boundary-length titles."""
+        title_196_with_spaces = "  " + ("A" * 196) + "  "
+        task = Task(title=title_196_with_spaces)
+        assert task.title == "A" * 196
+        assert len(task.title) == 196
+
+        title_199_with_spaces = "  " + ("A" * 199) + "  "
+        with pytest.raises(ValueError, match="ensure this value has at most 200 characters"):
+            Task(title=title_199_with_spaces)
+
     def test_completed_at_auto_set_when_done(self):
         """Test that completed_at is auto-set when status is DONE."""
         task = Task(title="Test", status=TaskStatus.DONE)
