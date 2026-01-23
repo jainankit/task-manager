@@ -26,19 +26,19 @@ class TaskStatus(str, Enum):
 
 class Tag(BaseModel):
     """A tag that can be applied to tasks."""
-    
-    name: str = Field(..., min_length=1, max_length=50)
-    color: str = Field(default="#808080", regex=r"^#[0-9A-Fa-f]{6}$")
 
-    class Config:
-        # Pydantic v1 config style
-        frozen = True
-        schema_extra = {
+    model_config = ConfigDict(
+        frozen=True,
+        json_schema_extra={
             "example": {
                 "name": "urgent",
                 "color": "#FF0000"
             }
         }
+    )
+
+    name: str = Field(..., min_length=1, max_length=50)
+    color: str = Field(default="#808080", pattern=r"^#[0-9A-Fa-f]{6}$")
 
 
 class Task(BaseModel):
