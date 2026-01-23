@@ -156,9 +156,17 @@ class TaskList(BaseModel):
         """Get all tasks that are past their due date."""
         now = datetime.utcnow()
         return [
-            t for t in self.tasks 
+            t for t in self.tasks
             if t.due_date and t.due_date < now and t.status != TaskStatus.DONE
         ]
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary (Pydantic v1 style)."""
+        return self.dict()
+
+    def to_json(self) -> str:
+        """Convert to JSON string (Pydantic v1 style)."""
+        return self.json()
 
 
 class User(BaseModel):
