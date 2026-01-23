@@ -6,7 +6,15 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict, ValidationInfo, validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+    validator,
+)
 
 
 class Priority(str, Enum):
