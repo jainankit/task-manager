@@ -330,6 +330,32 @@ class TestUser:
         with pytest.raises(ValueError):
             User(username="johndoe", email="not-an-email")
 
+    def test_username_with_50_characters_succeeds(self):
+        """Test that username with exactly 50 characters is accepted."""
+        username_50 = "a" * 50
+        user = User(username=username_50, email="test@example.com")
+        assert user.username == username_50
+        assert len(user.username) == 50
+
+    def test_username_with_51_characters_fails(self):
+        """Test that username with 51 characters raises ValidationError."""
+        username_51 = "a" * 51
+        with pytest.raises(ValueError, match="ensure this value has at most 50 characters"):
+            User(username=username_51, email="test@example.com")
+
+    def test_username_with_3_characters_succeeds(self):
+        """Test that username with exactly 3 characters (minimum) is accepted."""
+        username_3 = "abc"
+        user = User(username=username_3, email="test@example.com")
+        assert user.username == username_3
+        assert len(user.username) == 3
+
+    def test_username_with_2_characters_fails(self):
+        """Test that username with 2 characters raises ValidationError."""
+        username_2 = "ab"
+        with pytest.raises(ValueError, match="ensure this value has at least 3 characters"):
+            User(username=username_2, email="test@example.com")
+
     def test_to_dict(self):
         """Test converting user to dictionary."""
         user = User(username="johndoe", email="john@example.com")
