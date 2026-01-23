@@ -2,7 +2,7 @@
 Tests for the task management models.
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from models import Task, TaskList, Tag, User, Priority, TaskStatus
 
