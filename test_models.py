@@ -242,6 +242,45 @@ class TestUser:
         with pytest.raises(ValueError):
             User(username="johndoe", email="not-an-email")
 
+    def test_invalid_email_double_dots(self):
+        """Test that emails with consecutive dots are rejected."""
+        with pytest.raises(ValueError):
+            User(username="johndoe", email="user..name@example.com")
+
+    def test_invalid_email_leading_dot(self):
+        """Test that emails with leading dots are rejected."""
+        with pytest.raises(ValueError):
+            User(username="johndoe", email=".user@example.com")
+
+    def test_invalid_email_trailing_dot(self):
+        """Test that emails with trailing dots in local part are rejected."""
+        with pytest.raises(ValueError):
+            User(username="johndoe", email="user.@example.com")
+
+    def test_invalid_email_no_tld(self):
+        """Test that emails without a TLD are rejected."""
+        with pytest.raises(ValueError):
+            User(username="johndoe", email="user@domain")
+
+    def test_invalid_email_no_local_part(self):
+        """Test that emails without a local part are rejected."""
+        with pytest.raises(ValueError):
+            User(username="johndoe", email="@example.com")
+
+    def test_valid_email_formats(self):
+        """Test that various valid email formats are accepted."""
+        valid_emails = [
+            "user@subdomain.example.com",
+            "user+tag@example.com",
+            "user-name@example.com",
+            "user_name@example.com",
+            "user123@example.co.uk",
+            "first.last@example.com"
+        ]
+        for email in valid_emails:
+            user = User(username="testuser", email=email)
+            assert user.email == email.lower()
+
     def test_to_dict(self):
         """Test converting user to dictionary."""
         user = User(username="johndoe", email="john@example.com")
