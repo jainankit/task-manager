@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, EmailStr, Field, validator, root_validator
 
 
 class Priority(str, Enum):
@@ -166,7 +166,7 @@ class User(BaseModel):
     
     id: Optional[int] = None
     username: str = Field(..., min_length=3, max_length=50, regex=r"^[a-zA-Z0-9_]+$")
-    email: str = Field(..., regex=r"^[\w\.-]+@[\w\.-]+\.\w+$")
+    email: EmailStr
     full_name: Optional[str] = None
     is_active: bool = True
     task_lists: List[TaskList] = Field(default_factory=list)
